@@ -1,0 +1,77 @@
+# --- Maven ---
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+*.log
+
+# --- IntelliJ IDEA ---
+.idea
+.idea/
+/.idea/**
+*.iws
+*.iml
+*.ipr
+out/
+
+# --- Eclipse / STS ---
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+
+# --- VS Code ---
+.vscode/
+*.code-workspace
+
+# --- NetBeans ---
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+
+# --- Mac OS ---
+.DS_Store
+
+# --- Spring Boot / Logs ---
+logs/
+*.log
+*.gz
+tms.log
+application.log
+
+# --- Secrets & Credentials---
+# Development config dosyalarını bazen ignore etmek isteyebilirsin
+# Ama production şifreleri içerenleri kesinlikle ignore etmelisin.
+# src/main/resources/application-secret.properties
+# k8s/karga-secret.yaml
+**/application-dev.properties
+**/application-prod.properties
+**/application-secret.properties
+
+# SSL Certificates
+*.jks
+*.p12
+*.key
+*.pem
+*.crt
+*.csr
+*.keystore
+*.truststore
+
+# --- Kubernetes Generated Files ---
+# Eğer k8s klasöründe otomatik oluşan dosyalar varsa buraya ekle.
+# Şimdilik şablonları (example.yaml) tutuyoruz, gerçek secretları engelliyoruz.
+k8s/karga-secret.yaml
+
+# --- Temporary Files ---
+*.tmp
+*.bak
+*.swp
+*~
