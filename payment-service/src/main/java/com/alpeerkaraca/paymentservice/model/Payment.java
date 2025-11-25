@@ -30,6 +30,7 @@ public class Payment extends BaseClass {
     private Timestamp paidAt;
 
     private String stripeSessionId;
+    @Column(columnDefinition = "TEXT")
     private String stripeSessionUrl;
 
 }
