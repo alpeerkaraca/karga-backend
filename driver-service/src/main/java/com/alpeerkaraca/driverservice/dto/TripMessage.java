@@ -10,6 +10,8 @@ public record TripMessage(
         UUID driverId,
         Timestamp timestamp,
         BigDecimal fare,
-        UUID passengerId
+        UUID passengerId,
+        double currentLongitude,
+        double currentLatitude
 ) {
 }

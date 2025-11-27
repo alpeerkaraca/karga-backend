@@ -13,15 +13,11 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Table(name = "drivers")
-//@SQLDelete(sql = "UPDATE drivers SET deleted_at = NOW() WHERE driver_id = ?")
 public class Driver extends BaseClass {
     @Id
     private UUID driverId;
 
-    @Column(name = "user_id", unique = true)
-    private UUID userId;
-
-    @OneToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "vehicle_id")
     private Vehicle vehicle;
 

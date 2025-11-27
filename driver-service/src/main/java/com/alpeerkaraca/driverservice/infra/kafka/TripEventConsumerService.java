@@ -25,11 +25,11 @@ public class TripEventConsumerService {
             if ("TRIP_ACCEPTED".equals(eventType) || "TRIP_STARTED".equals(eventType)) {
                 UUID driverId = message.driverId();
                 log.info("Yolculuk kabul edildi/başladı olayı alındı. Sürücü {} BUSY olarak ayarlanıyor.", driverId);
-                driverStatusService.updateDriverStatus(driverId, DriverStatus.BUSY, null, null);
+                driverStatusService.updateDriverStatus(driverId, DriverStatus.BUSY, message.currentLongitude(), message.currentLatitude());
             } else if ("TRIP_COMPLETED".equals(eventType) || "TRIP_CANCELED".equals(eventType)) {
                 UUID driverId = message.driverId();
                 log.info("Yolculuk tamamlandı/iptal edildi olayı alındı. Sürücü {} ONLINE olarak ayarlanıyor.", driverId);
-                driverStatusService.updateDriverStatus(driverId, DriverStatus.ONLINE, null, null);
+                driverStatusService.updateDriverStatus(driverId, DriverStatus.ONLINE, message.currentLongitude(), message.currentLatitude());
             } else {
                 log.warn("Bilinmeyen yolculuk olayı türü alındı: {}", eventType);
             }
