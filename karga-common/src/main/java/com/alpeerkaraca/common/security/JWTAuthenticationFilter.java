@@ -30,7 +30,7 @@ public class JWTAuthenticationFilter extends OncePerRequestFilter {
         final String jwtToken;
         final String username;
 
-        if (authorizationHeader == null ||  !authorizationHeader.startsWith("Bearer ")) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -41,16 +41,16 @@ public class JWTAuthenticationFilter extends OncePerRequestFilter {
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null
                 && jwtService.isTokenValid(jwtToken)) {
 
-                String userId = jwtService.extractUserId(jwtToken);
-                List<String> roles = jwtService.extractRoles(jwtToken);
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userId,
-                        null,
-                        roles.stream().map(SimpleGrantedAuthority::new).toList()
-                );
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
-            }
+            String userId = jwtService.extractUserId(jwtToken);
+            List<String> roles = jwtService.extractRoles(jwtToken);
+            UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                    userId,
+                    null,
+                    roles.stream().map(SimpleGrantedAuthority::new).toList()
+            );
+            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(authToken);
+        }
 
 
         filterChain.doFilter(request, response);

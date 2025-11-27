@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -24,6 +25,8 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class RateLimitAspect {
     private final RedisTemplate<String, String> redisTemplate;
+    @Value("${rate-limit.enabled:true}")
+    private boolean rateLimitEnabled;
 
     /**
      * Checks and enforces the rate limit for a method annotated with the {@code @RateLimit} annotation.
@@ -36,6 +39,9 @@ public class RateLimitAspect {
      */
     @Before("@annotation(rateLimit)")
     public void checkRateLimit(JoinPoint joinPoint, RateLimit rateLimit) {
+        if (!rateLimitEnabled) {
+            return;
+        }
         String identifier = getIdentifier();
         String key = "rate_limit:" + rateLimit.key() + ":" + identifier;
         long limit = rateLimit.limit();
@@ -48,7 +54,7 @@ public class RateLimitAspect {
             Long currentCount = redisTemplate.opsForZSet().zCard(key);
 
             if (currentCount != null && currentCount >= limit) {
-                log.warn("Rate limit aşıldı! User: {}, Key: {}", identifier, key);
+                log.warn("Rate limit exceeded! User: {}, Key: {}", identifier, key);
                 throw new RateLimitExceededException("You've sent too many requests. Please try again later.");
             }
 
@@ -57,8 +63,7 @@ public class RateLimitAspect {
             redisTemplate.expire(key, windowSizeMillis, TimeUnit.MILLISECONDS);
         } catch (RateLimitExceededException e) {
             throw e;
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             log.error("Rate limit check failed:", e);
         }
     }
@@ -69,7 +74,7 @@ public class RateLimitAspect {
      * Otherwise, it attempts to extract the identifier from the "X-Forwarded-For" header or the remote address of the request.
      *
      * @return the identifier for the user or client, derived from the authenticated principal,
-     *         the "X-Forwarded-For" header, or the remote address of the request
+     * the "X-Forwarded-For" header, or the remote address of the request
      */
     private String getIdentifier() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();

@@ -10,7 +10,10 @@ import java.util.concurrent.TimeUnit;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface RateLimit {
     int limit() default 10;
+
     int duration() default 60;
+
     String key() default ""; // How to specify limit (login, register?)
+
     TimeUnit unit() default TimeUnit.SECONDS;
 }

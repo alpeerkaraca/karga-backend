@@ -7,18 +7,19 @@ import java.util.Map;
 
 @Setter
 @Getter
-public class ApiResponse <T>{
+public class ApiResponse<T> {
     private boolean success;
     private String message;
     private T data;
 
-    public static <T> ApiResponse<T> success(T data, String message){
+    public static <T> ApiResponse<T> success(T data, String message) {
         ApiResponse<T> response = new ApiResponse<>();
         response.setSuccess(true);
         response.setData(data);
         response.setMessage(message);
         return response;
     }
+
     public static <T> ApiResponse<T> error(String message) {
         ApiResponse<T> response = new ApiResponse<>();
         response.setSuccess(false);
@@ -34,8 +35,8 @@ public class ApiResponse <T>{
         response.setData(null);
         StringBuilder messageBuilder = new StringBuilder();
         messageBuilder.append(s).append(" ");
-        errors.forEach((k,v)->
-            messageBuilder.append(v).append(", ")
+        errors.forEach((k, v) ->
+                messageBuilder.append(v).append(", ")
         );
         String message = messageBuilder.toString();
         response.setMessage(message);
