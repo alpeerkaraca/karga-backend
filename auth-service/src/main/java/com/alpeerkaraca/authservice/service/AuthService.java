@@ -9,8 +9,8 @@ import com.alpeerkaraca.authservice.repository.UserRepository;
 import com.alpeerkaraca.common.dto.RefreshTokenRequest;
 import com.alpeerkaraca.common.dto.TokenPair;
 import com.alpeerkaraca.common.exception.ConflictException;
+import com.alpeerkaraca.common.exception.InvalidCredentialsException;
 import com.alpeerkaraca.common.exception.InvalidTokenException;
-import com.alpeerkaraca.common.exception.ResourceNotFoundException;
 import com.alpeerkaraca.common.security.JWTService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -42,7 +42,7 @@ public class AuthService {
             throw new ConflictException("Email already in use");
         });
         User user = User.builder()
-                .email(request.getEmail())
+                .email(request.getEmail().toLowerCase())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(Role.PASSENGER)
                 .isActive(false)
@@ -57,9 +57,9 @@ public class AuthService {
     }
 
     public TokenPair login(@Valid UserLoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail()).orElseThrow(() -> new ResourceNotFoundException("Email or password is incorrect"));
+        User user = userRepository.findByEmail(request.getEmail()).orElseThrow(() -> new InvalidCredentialsException("Email or password is incorrect"));
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new ResourceNotFoundException("Email or password is incorrect");
+            throw new InvalidCredentialsException("Email or password is incorrect");
         }
 
         Authentication authentication = authenticationManager.authenticate(

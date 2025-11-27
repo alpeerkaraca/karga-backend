@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
     private final AuthService authService;
     private final UserRepository userRepository;
+
     @RateLimit(key = "register", limit = 3, duration = 3600)
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<Void>> registerUser(@Valid @RequestBody UserRegisterRequest request) {
@@ -33,6 +34,7 @@ public class AuthController {
                                 "We'll send you an email after activation.")
                 );
     }
+
     @RateLimit(key = "login", limit = 5, duration = 60)
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<TokenPair>> loginUser(@Valid @RequestBody UserLoginRequest request) {
