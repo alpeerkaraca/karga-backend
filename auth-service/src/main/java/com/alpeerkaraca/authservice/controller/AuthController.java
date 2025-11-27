@@ -4,6 +4,7 @@ import com.alpeerkaraca.authservice.dto.UserLoginRequest;
 import com.alpeerkaraca.authservice.dto.UserRegisterRequest;
 import com.alpeerkaraca.authservice.repository.UserRepository;
 import com.alpeerkaraca.authservice.service.AuthService;
+import com.alpeerkaraca.common.annotation.RateLimit;
 import com.alpeerkaraca.common.dto.ApiResponse;
 import com.alpeerkaraca.common.dto.TokenPair;
 import jakarta.validation.Valid;
@@ -21,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
     private final AuthService authService;
     private final UserRepository userRepository;
-
+    @RateLimit(key = "register", limit = 3, duration = 3600)
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<Void>> registerUser(@Valid @RequestBody UserRegisterRequest request) {
         authService.registerUser(request);
@@ -32,7 +33,7 @@ public class AuthController {
                                 "We'll send you an email after activation.")
                 );
     }
-
+    @RateLimit(key = "login", limit = 5, duration = 60)
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<TokenPair>> loginUser(@Valid @RequestBody UserLoginRequest request) {
         TokenPair tokenPair = authService.login(request);
