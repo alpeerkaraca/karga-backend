@@ -5,10 +5,9 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.Email;
 import lombok.*;
-import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
-import org.hibernate.annotations.SQLUpdate;
 
 import java.util.UUID;
 
@@ -19,8 +18,6 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Table(name = "user_profiles")
-@SQLDelete(sql = "UPDATE users SET deleted_at = NOW() WHERE user_id = ?")
-@SQLUpdate(sql = "UPDATE users SET updated_at = NOW() WHERE user_id = ?")
 @SQLRestriction("deleted_at IS NULL")
 public class UserProfile extends BaseClass {
     @Id
@@ -28,8 +25,10 @@ public class UserProfile extends BaseClass {
     private String firstName;
     private String lastName;
     @Column(unique = true, nullable = false)
+    @Email
     private String email;
     @Column(unique = true, nullable = false)
     private String phoneNumber;
+
     private double rating;
 }

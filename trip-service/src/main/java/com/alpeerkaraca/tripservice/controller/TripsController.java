@@ -10,6 +10,7 @@ import com.alpeerkaraca.tripservice.service.TripRequestService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,19 +30,22 @@ public class TripsController {
     private final TripManagementService tripManagementService;
 
     @GetMapping("/nearby-drivers")
-    public ApiResponse<List<NearbyDriversResponse>> getNearbyDrivers(
-            @NotNull @RequestParam("latitude") Double latitude,
-            @NotNull @RequestParam("longitude") Double longitude
+    public ResponseEntity<ApiResponse<List<NearbyDriversResponse>>> getNearbyDrivers(
+            @NotNull @Valid @RequestParam("latitude") Double latitude,
+            @NotNull @Valid @RequestParam("longitude") Double longitude
     ) {
         List<NearbyDriversResponse> nearbyDrivers = tripRequestService.findNearbyDrivers(
                 latitude,
                 longitude,
                 DEFAULT_RADIUS_KM
         );
-        return ApiResponse.success(
-                nearbyDrivers,
-                "Yakındaki sürücüler listelendi."
-        );
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.success(
+                        nearbyDrivers,
+                        "Yakındaki sürücüler listelendi."
+                ));
+
     }
 
     @PostMapping("/request")

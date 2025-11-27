@@ -1,4 +1,4 @@
-package com.alpeerkaraca.paymentservice.Controller;
+package com.alpeerkaraca.paymentservice.controller;
 
 import com.alpeerkaraca.common.dto.ApiResponse;
 import com.alpeerkaraca.paymentservice.service.StripePaymentService;
@@ -23,6 +23,7 @@ public class PaymentWebhookController {
 
     @Value("${stripe.webhook.secret}")
     private String stripeWebhookSecret;
+
     @PostMapping(value = "/webhook", consumes = APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.OK)
     public ResponseEntity<ApiResponse<String>> handleStripeWebhookData(@RequestBody String payload, @RequestHeader("Stripe-Signature") String sigHeader) {
@@ -30,12 +31,10 @@ public class PaymentWebhookController {
         Event event;
         try {
             event = Webhook.constructEvent(payload, sigHeader, stripeWebhookSecret);
-        }
-        catch (SignatureVerificationException e) {
+        } catch (SignatureVerificationException e) {
             // Invalid signature
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error("Invalid signature"));
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error("Error parsing webhook"));
         }
 

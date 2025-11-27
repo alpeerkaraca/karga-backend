@@ -3,6 +3,7 @@ package com.alpeerkaraca.driverservice.controller;
 
 import com.alpeerkaraca.driverservice.dto.LocationUpdateRequest;
 import com.alpeerkaraca.driverservice.service.DriverLocationService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,14 +22,15 @@ public class DriverLocationController {
 
     private final DriverLocationService driverLocationService;
 
+    @Validated
     @PostMapping("/location")
-    public ResponseEntity<Void> updateLocation(@Validated @RequestBody LocationUpdateRequest driverUpdateStatus) {
+    public ResponseEntity<Void> updateLocation(@Valid @RequestBody LocationUpdateRequest driverUpdateStatus) {
         String userIdString = SecurityContextHolder.getContext().getAuthentication().getName();
         UUID driverId = UUID.fromString(userIdString);
         driverLocationService.publishDriverLocationMessage(
                 driverId,
-                driverUpdateStatus.latitude(),
-                driverUpdateStatus.longitude()
+                driverUpdateStatus.getLatitude(),
+                driverUpdateStatus.getLongitude()
         );
         return ResponseEntity.accepted().build();
     }

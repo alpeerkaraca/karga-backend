@@ -5,7 +5,6 @@ import com.alpeerkaraca.driverservice.dto.DriverUpdateStatus;
 import com.alpeerkaraca.driverservice.service.DriverStatusService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,7 +18,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/drivers")
 @Slf4j
-@PreAuthorize("hasRole('DRIVER') or hasRole('ADMIN')")
 public class DriverStatusController {
     private final DriverStatusService driverStatusService;
 

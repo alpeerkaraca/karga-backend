@@ -20,5 +20,7 @@ public class TripMessage {
     private UUID passengerId;
     private Timestamp timestamp;
     private BigDecimal fare;
+    private double currentLongitude;
+    private double currentLatitude;
 }
 
