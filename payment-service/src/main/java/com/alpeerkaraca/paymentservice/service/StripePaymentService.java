@@ -39,6 +39,10 @@ public class StripePaymentService {
 
     @Transactional
     public Payment createPaymentSession(UUID tripId, UUID passengerId, BigDecimal paymentAmount) {
+        var existingPayment = paymentRepository.findByTripId(tripId);
+        if (existingPayment.isPresent()) {
+            return existingPayment.get();
+        }
         Payment payment = Payment.builder()
                 .tripId(tripId)
                 .passengerId(passengerId)
@@ -46,7 +50,7 @@ public class StripePaymentService {
                 .paymentStatus(PaymentStatus.PENDING)
                 .build();
 
-        paymentRepository.save(payment);
+        payment = paymentRepository.save(payment);
 
         if (payment.getPaymentStatus() != PaymentStatus.PENDING) {
             log.warn("This payment already has been proceeded: {}", payment.getPaymentId());
@@ -128,7 +132,7 @@ public class StripePaymentService {
     }
 
     private void approvePayment(PaymentIntent intent) {
-        Payment payment = paymentRepository.findById(UUID.fromString(intent.getMetadata().get("payment_id"))).orElseThrow( () -> new ResourceNotFoundException("Payment could not found." +  intent.toJson()));
+        Payment payment = paymentRepository.findById(UUID.fromString(intent.getMetadata().get("payment_id"))).orElseThrow(() -> new ResourceNotFoundException("Payment could not found." + intent.toJson()));
         payment.setPaymentStatus(PaymentStatus.COMPLETED);
         payment.setPaidAt(Timestamp.valueOf(LocalDateTime.now()));
         // TODO: Send a notification or email to user.
@@ -136,7 +140,7 @@ public class StripePaymentService {
     }
 
     private void failedPayment(PaymentIntent intent) {
-        Payment payment = paymentRepository.findByStripeSessionId(intent.getId()).orElseThrow( () -> new ResourceNotFoundException("Payment could not found." +  intent.toJson()));
+        Payment payment = paymentRepository.findByStripeSessionId(intent.getId()).orElseThrow(() -> new ResourceNotFoundException("Payment could not found." + intent.toJson()));
         payment.setPaymentStatus(PaymentStatus.FAILED);
 
         // Send a notification or email to user.
