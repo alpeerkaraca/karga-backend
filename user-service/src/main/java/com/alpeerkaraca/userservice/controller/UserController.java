@@ -1,14 +1,17 @@
 package com.alpeerkaraca.userservice.controller;
 
 import com.alpeerkaraca.common.dto.ApiResponse;
+import com.alpeerkaraca.common.exception.EmptyBodyException;
+import com.alpeerkaraca.userservice.dto.UpdateUserProfileDto;
 import com.alpeerkaraca.userservice.model.UserProfile;
 import com.alpeerkaraca.userservice.service.UserProfileService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Objects;
 import java.util.UUID;
 
 @RestController
@@ -27,14 +30,16 @@ public class UserController {
     }
 
     @PutMapping("/me")
-    public ResponseEntity<ApiResponse<UserProfile>> updateMe(@RequestBody UserProfile userProfile) {
-        String userIdString = SecurityContextHolder.getContext().getAuthentication().getName();
-        UUID userId = UUID.fromString(userIdString);
-        if (Objects.equals(userId, userProfile.getUserId())) {
-            throw new IllegalArgumentException("Credentials could not be verified.");
+    @Validated
+    public ResponseEntity<ApiResponse<UserProfile>> updateMe(@RequestBody @Valid UpdateUserProfileDto userProfile) {
+        if (userProfile.isAllFieldsNull()) {
+            throw new EmptyBodyException("At least one field must be provided.");
         }
 
-        UserProfile updatedUser = userProfileService.updateProfile(userProfile);
+        String userIdString = SecurityContextHolder.getContext().getAuthentication().getName();
+        UUID userId = UUID.fromString(userIdString);
+
+        UserProfile updatedUser = userProfileService.updateProfile(userProfile, userId);
 
         return ResponseEntity.ok(ApiResponse.success(updatedUser, "User profile updated successfully."));
     }
