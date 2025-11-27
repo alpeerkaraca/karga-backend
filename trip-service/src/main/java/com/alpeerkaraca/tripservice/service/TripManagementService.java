@@ -11,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
-import java.awt.geom.Point2D;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -81,6 +80,8 @@ public class TripManagementService {
                     .passengerId(trip.getPassengerId())
                     .timestamp(Timestamp.valueOf(LocalDateTime.now()))
                     .fare(new BigDecimal(0))
+                    .currentLongitude(trip.getStartLongitude())
+                    .currentLatitude(trip.getStartLatitude())
                     .build();
             kafkaTemplate.send(TOPIC_TRIP_EVENTS, kafkaMessage);
         }
@@ -104,6 +105,8 @@ public class TripManagementService {
                     .passengerId(trip.getPassengerId())
                     .timestamp(Timestamp.valueOf(LocalDateTime.now()))
                     .fare(fare)
+                    .currentLongitude(trip.getEndLongitude())
+                    .currentLatitude(trip.getEndLatitude())
                     .build();
             kafkaTemplate.send(TOPIC_TRIP_EVENTS, kafkaMessage);
         }
@@ -126,6 +129,8 @@ public class TripManagementService {
                     .passengerId(trip.getPassengerId())
                     .timestamp(Timestamp.valueOf(LocalDateTime.now()))
                     .fare(new BigDecimal(0))
+                    .currentLongitude(trip.getStartLongitude())
+                    .currentLatitude(trip.getStartLatitude())
                     .build();
             kafkaTemplate.send(TOPIC_TRIP_EVENTS, kafkaMessage);
         }
