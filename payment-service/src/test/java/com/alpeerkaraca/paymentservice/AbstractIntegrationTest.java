@@ -26,4 +26,5 @@ public abstract class AbstractIntegrationTest {
     @ServiceConnection
     static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("apache/kafka:4.1.1"));
 
+
 }

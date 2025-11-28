@@ -19,25 +19,52 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Service managing the entire lifecycle of a trip (Accept, Start, Complete, Cancel).
+ * <p>
+ * This service handles state transitions, persists them to the database,
+ * performs fare calculations based on distance/time, and broadcasts lifecycle events via Kafka.
+ * </p>
+ */
 @Service
 @RequiredArgsConstructor
 public class TripManagementService {
     private static final String TOPIC_TRIP_EVENTS = "trip_events";
-    // TAXI FARE PRICES
+
+    // TAXI FARE PRICING CONSTANTS
     private static final double DISTANCE_FEE_PER_KM = 36.30;
     private static final double TIME_FEE_PER_MIN = 7.56;
     private static final double OPENING_FEE = 54.50;
     private static final BigDecimal MINIMUM_FEE = BigDecimal.valueOf(175);
-    // Constants
+
     private static final String TRIP_NOT_FOUND = "Trip not found: ";
     private static final double EARTH_RADIUS_KM = 6371.0;
+
     private final TripRepository tripsRepository;
     private final KafkaTemplate<String, TripMessage> kafkaTemplate;
 
+    /**
+     * Retrieves a list of trips that are currently available for drivers to accept.
+     *
+     * @return List of available {@link Trip} entities.
+     */
     public List<Trip> getAvailableTrips() {
         return tripsRepository.findAvailableTrips();
     }
 
+    /**
+     * Accepts a requested trip by a driver.
+     * <p>
+     * Locks the trip record (via {@code findByIdForUpdate}) to prevent concurrent accepts.
+     * Updates status to {@link TripStatus#ACCEPTED} and publishes 'TRIP_ACCEPTED' event.
+     * </p>
+     *
+     * @param tripId   UUID of the trip.
+     * @param driverId UUID of the driver accepting the trip.
+     * @return The updated {@link Trip} entity.
+     * @throws ResourceNotFoundException If trip is not found.
+     * @throws ConflictException         If trip is not in REQUESTED state.
+     */
     @Transactional
     public Trip acceptTrip(UUID tripId, UUID driverId) {
         Trip trip = tripsRepository.findByIdForUpdate(tripId)
@@ -49,7 +76,7 @@ public class TripManagementService {
 
         trip.setDriverId(driverId);
         trip.setTripStatus(TripStatus.ACCEPTED);
-        trip.setStartedAt(Timestamp.from(Instant.now()));
+        trip.setStartedAt(Timestamp.from(Instant.now())); // Usually marks acceptance time here
         Trip savedTrip = tripsRepository.save(trip);
 
         TripMessage kafkaMessage = TripMessage.builder()
@@ -65,6 +92,12 @@ public class TripManagementService {
         return savedTrip;
     }
 
+    /**
+     * Starts the trip when the driver picks up the passenger.
+     * Updates status to {@link TripStatus#IN_PROGRESS}.
+     *
+     * @param tripId UUID of the trip.
+     */
     public void startTrip(UUID tripId) {
         Trip trip = tripsRepository.findById(tripId).orElseThrow(() -> new ResourceNotFoundException(TRIP_NOT_FOUND + tripId));
         if (trip.getTripStatus() != TripStatus.ACCEPTED) {
@@ -73,6 +106,7 @@ public class TripManagementService {
             trip.setTripStatus(TripStatus.IN_PROGRESS);
             trip.setStartedAt(Timestamp.from(Instant.now()));
             tripsRepository.save(trip);
+
             TripMessage kafkaMessage = TripMessage.builder()
                     .eventType("TRIP_STARTED")
                     .tripId(tripId)
@@ -87,6 +121,11 @@ public class TripManagementService {
         }
     }
 
+    /**
+     * Completes the trip, calculates the final fare, and publishes the completion event.
+     *
+     * @param tripId UUID of the trip.
+     */
     public void completeTrip(UUID tripId) {
         Trip trip = tripsRepository.findById(tripId).orElseThrow(() -> new ResourceNotFoundException(TRIP_NOT_FOUND + tripId));
         if (trip.getTripStatus() != TripStatus.IN_PROGRESS) {
@@ -98,6 +137,7 @@ public class TripManagementService {
 
             trip.setFare(fare);
             tripsRepository.save(trip);
+
             TripMessage kafkaMessage = TripMessage.builder()
                     .eventType("TRIP_COMPLETED")
                     .tripId(tripId)
@@ -112,6 +152,11 @@ public class TripManagementService {
         }
     }
 
+    /**
+     * Cancels the trip if it hasn't been completed or canceled yet.
+     *
+     * @param tripId UUID of the trip.
+     */
     public void cancelTrip(UUID tripId) {
         Trip trip = tripsRepository.findById(tripId).orElseThrow(() -> new ResourceNotFoundException(TRIP_NOT_FOUND + tripId));
         if (trip.getTripStatus() == TripStatus.COMPLETED) {
@@ -122,6 +167,7 @@ public class TripManagementService {
             trip.setTripStatus(TripStatus.CANCELLED);
             trip.setEndedAt(Timestamp.from(Instant.now()));
             tripsRepository.save(trip);
+
             TripMessage kafkaMessage = TripMessage.builder()
                     .eventType("TRIP_CANCELLED")
                     .tripId(tripId)
@@ -136,27 +182,37 @@ public class TripManagementService {
         }
     }
 
+    /**
+     * Calculates the total fare based on distance (Haversine formula) and time elapsed.
+     * Returns the minimum fee if the calculated fare is lower.
+     */
     private BigDecimal calculateFare(Trip trip) {
         if (trip.getTripStatus() != TripStatus.COMPLETED) {
             return BigDecimal.ZERO;
         }
-        long timeDifference = TimeUnit.MILLISECONDS.toMinutes(trip.getEndedAt().getTime() - trip.getStartedAt().getTime());
+        long timeDifference = trip.getEndedAt().getTime() - trip.getStartedAt().getTime();
         long elapsedMinutes = TimeUnit.MILLISECONDS.toMinutes(timeDifference);
+
         double distanceInKm = calculateHaversineDistance(
                 trip.getStartLatitude(),
                 trip.getStartLongitude(),
                 trip.getEndLatitude(),
                 trip.getEndLongitude()
         );
+
         BigDecimal fare = BigDecimal.valueOf(OPENING_FEE)
                 .add(BigDecimal.valueOf(DISTANCE_FEE_PER_KM * distanceInKm))
                 .add(BigDecimal.valueOf(TIME_FEE_PER_MIN * elapsedMinutes));
+
         if (fare.compareTo(MINIMUM_FEE) < 0) {
             return MINIMUM_FEE;
         }
         return fare;
     }
 
+    /**
+     * Calculates the great-circle distance between two points on a sphere using the Haversine formula.
+     */
     private double calculateHaversineDistance(double startLat, double startLong, double endLat, double endLong) {
         double dLat = Math.toRadians(endLat - startLat);
         double dLon = Math.toRadians(endLong - startLong);
@@ -172,6 +228,5 @@ public class TripManagementService {
         double angularDistanceInRadians = 2 * Math.asin(Math.sqrt(squareOfHalfChordLength));
 
         return EARTH_RADIUS_KM * angularDistanceInRadians;
-
     }
 }

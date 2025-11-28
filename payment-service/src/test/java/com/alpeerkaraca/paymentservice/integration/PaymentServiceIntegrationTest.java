@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -37,6 +38,9 @@ class PaymentServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private KafkaTemplate<String, TripMessage> kafkaTemplate;
+
+    @MockitoBean
+    private RedisTemplate<String, String> redisTemplate;
 
     @MockitoBean
     private StripePaymentService stripePaymentService;

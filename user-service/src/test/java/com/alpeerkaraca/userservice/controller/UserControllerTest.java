@@ -3,7 +3,9 @@ package com.alpeerkaraca.userservice.controller;
 import com.alpeerkaraca.common.exception.GlobalExceptionHandler;
 import com.alpeerkaraca.common.exception.ResourceNotFoundException;
 import com.alpeerkaraca.userservice.dto.UpdateUserProfileDto;
+import com.alpeerkaraca.userservice.infra.kafka.UserConsumer;
 import com.alpeerkaraca.userservice.model.UserProfile;
+import com.alpeerkaraca.userservice.repository.UserProfileRepository;
 import com.alpeerkaraca.userservice.service.UserProfileService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
@@ -14,6 +16,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -44,6 +47,15 @@ class UserControllerTest {
 
     @MockitoBean
     private UserProfileService userProfileService;
+
+    @MockitoBean
+    private UserProfileRepository userProfileRepository;
+
+    @MockitoBean
+    private UserConsumer userConsumer;
+
+    @MockitoBean
+    private RedisTemplate<String, String> redisTemplate;
 
     @Nested
     @DisplayName("GET /api/v1/users/me - Get User Profile")
@@ -256,7 +268,7 @@ class UserControllerTest {
                             .content(objectMapper.writeValueAsString(updateRequest)))
                     .andExpect(status().isUnauthorized());
 
-            verify(userProfileService, never()).updateProfile((UserProfile) any());
+            verify(userProfileService, never()).updateProfile(any());
         }
 
         @Test

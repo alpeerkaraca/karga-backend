@@ -7,10 +7,10 @@ import com.alpeerkaraca.paymentservice.repository.PaymentRepository;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.stripe.Stripe;
-import com.stripe.exception.StripeException;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -21,7 +21,6 @@ import java.util.UUID;
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +34,9 @@ class StripePaymentServiceWireMockTest extends AbstractIntegrationTest {
 
     @Autowired
     private StripePaymentService stripePaymentService;
+
+    @MockitoBean
+    private RedisTemplate<String, String> redisTemplate;
 
     @BeforeAll
     static void setupWireMock() {

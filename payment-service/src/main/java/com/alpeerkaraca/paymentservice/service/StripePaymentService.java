@@ -23,26 +23,50 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * Service managing Stripe API integration for payments.
+ * <p>
+ * This service handles the creation of Stripe Checkout Sessions for trips
+ * and processes asynchronous Webhook events (e.g., payment_succeeded, payment_failed).
+ * </p>
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class StripePaymentService {
 
     private final PaymentRepository paymentRepository;
+
     @Value("${stripe.apiKey}")
     private String stripeApiKey;
 
+    /**
+     * Initializes the Stripe API key during application startup.
+     */
     @PostConstruct
     public void init() {
         Stripe.apiKey = stripeApiKey;
     }
 
+    /**
+     * Creates a Stripe Checkout Session for a specific trip payment.
+     * <p>
+     * If a pending payment session already exists for the trip, it returns that session.
+     * Otherwise, creates a new session with line items and success/cancel URLs.
+     * </p>
+     *
+     * @param tripId        The ID of the trip to pay for.
+     * @param passengerId   The ID of the passenger making the payment.
+     * @param paymentAmount The amount to be paid.
+     * @return The persisted {@link Payment} entity with Stripe session details, or null if already processed.
+     */
     @Transactional
     public Payment createPaymentSession(UUID tripId, UUID passengerId, BigDecimal paymentAmount) {
         var existingPayment = paymentRepository.findByTripId(tripId);
         if (existingPayment.isPresent()) {
             return existingPayment.get();
         }
+
         Payment payment = Payment.builder()
                 .tripId(tripId)
                 .passengerId(passengerId)
@@ -83,11 +107,13 @@ public class StripePaymentService {
                     .putMetadata("trip_id", tripId.toString())
                     .putMetadata("passenger_id", passengerId.toString())
                     .build();
+
             Session session = Session.create(params);
             payment.setStripeSessionId(session.getId());
             payment.setStripeSessionUrl(session.getUrl());
             payment.setPaymentAmount(paymentAmount.setScale(2, RoundingMode.HALF_UP));
             payment.setPaymentStatus(PaymentStatus.PENDING);
+
             return paymentRepository.save(payment);
         } catch (Exception e) {
             log.error("Stripe Error: {}", e.getMessage());
@@ -96,6 +122,15 @@ public class StripePaymentService {
         }
     }
 
+    /**
+     * Asynchronously processes incoming Stripe Webhook events.
+     * <p>
+     * Handles 'payment_intent.succeeded' and 'payment_intent.payment_failed' events
+     * to update the local payment status accordingly.
+     * </p>
+     *
+     * @param event The Stripe event object.
+     */
     @Async
     public void processWebhookEvent(Event event) {
         PaymentIntent intent;
@@ -132,7 +167,8 @@ public class StripePaymentService {
     }
 
     private void approvePayment(PaymentIntent intent) {
-        Payment payment = paymentRepository.findById(UUID.fromString(intent.getMetadata().get("payment_id"))).orElseThrow(() -> new ResourceNotFoundException("Payment could not found." + intent.toJson()));
+        Payment payment = paymentRepository.findById(UUID.fromString(intent.getMetadata().get("payment_id")))
+                .orElseThrow(() -> new ResourceNotFoundException("Payment could not found." + intent.toJson()));
         payment.setPaymentStatus(PaymentStatus.COMPLETED);
         payment.setPaidAt(Timestamp.valueOf(LocalDateTime.now()));
         // TODO: Send a notification or email to user.
@@ -140,11 +176,11 @@ public class StripePaymentService {
     }
 
     private void failedPayment(PaymentIntent intent) {
-        Payment payment = paymentRepository.findByStripeSessionId(intent.getId()).orElseThrow(() -> new ResourceNotFoundException("Payment could not found." + intent.toJson()));
+        Payment payment = paymentRepository.findByStripeSessionId(intent.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Payment could not found." + intent.toJson()));
         payment.setPaymentStatus(PaymentStatus.FAILED);
 
         // Send a notification or email to user.
         paymentRepository.save(payment);
-
     }
 }

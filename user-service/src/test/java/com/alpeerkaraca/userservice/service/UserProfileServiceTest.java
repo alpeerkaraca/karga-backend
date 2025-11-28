@@ -109,7 +109,7 @@ class UserProfileServiceTest {
         // Act & Assert
         assertThatThrownBy(() -> userProfileService.getUserById(nonExistentId))
                 .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining("User not found.");
+                .hasMessageContaining("User profile not found: " + nonExistentId);
 
         verify(userProfileRepository).findById(nonExistentId);
     }
