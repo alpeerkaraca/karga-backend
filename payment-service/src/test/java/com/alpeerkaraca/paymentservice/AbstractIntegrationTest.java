@@ -6,6 +6,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.KafkaContainer;
+import org.testcontainers.utility.DockerImageName;
 
 @SpringBootTest
 @Testcontainers
@@ -19,5 +21,9 @@ public abstract class AbstractIntegrationTest {
             .withDatabaseName("testdb")
             .withUsername("test")
             .withPassword("test");
+
+    @Container
+    @ServiceConnection
+    static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("apache/kafka:4.1.1"));
 
 }

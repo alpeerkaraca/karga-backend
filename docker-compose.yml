@@ -1,0 +1,277 @@
+version: '3.8'
+services:
+  # ----- Microservices Start -----
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    ports:
+      - "8084:8084"
+    secrets:
+      - auth_db_password
+      - redis_username
+      - redis_password
+      - jwt_secret
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - auth-db
+      - karga-redis
+      - karga-kafka
+    networks:
+      - karga-network
+
+  driver-service:
+    build:
+      context: .
+      dockerfile: driver-service/Dockerfile
+    ports:
+      - "8085:8085"
+    secrets:
+      - driver_db_password
+      - redis_username
+      - redis_password
+      - jwt_secret
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - driver-db
+      - karga-redis
+      - karga-kafka
+    networks:
+      - karga-network
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    ports:
+      - "8086:8086"
+    secrets:
+      - payment_db_password
+      - redis_username
+      - redis_password
+      - stripe_webhook_secret
+      - stripe_api_key
+      - jwt_secret
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - payment-db
+      - karga-redis
+      - karga-kafka
+    networks:
+      - karga-network
+
+  trip-service:
+    build:
+      context: .
+      dockerfile: trip-service/Dockerfile
+    ports:
+      - "8087:8087"
+    secrets:
+      - trip_db_password
+      - redis_username
+      - redis_password
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - trip-db
+      - karga-redis
+      - karga-kafka
+    networks:
+      - karga-network
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    ports:
+      - "8088:8088"
+    secrets:
+      - user_db_password
+      - redis_username
+      - redis_password
+      - jwt_secret
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - user-db
+      - karga-redis
+      - karga-kafka
+    networks:
+      - karga-network
+
+  # ----- POSTGRES DB START -----
+
+  auth-db:
+    image: postgres:18-alpine
+    container_name: auth-db-karga
+    restart: always
+    secrets:
+      - auth_db_password
+
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/auth_db_password
+      POSTGRES_USER: karga
+      POSTGRES_DB: auth_db
+    volumes:
+      - auth-postgres-data:/var/lib/postgresql
+    networks:
+      - karga-network
+
+  driver-db:
+    image: postgres:18-alpine
+    container_name: driver-db-karga
+    restart: always
+    secrets:
+      - driver_db_password
+
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/driver_db_password
+      POSTGRES_USER: karga
+      POSTGRES_DB: driver_db
+    volumes:
+      - driver-postgres-data:/var/lib/postgresql
+    networks:
+      - karga-network
+
+  payment-db:
+    image: postgres:18-alpine
+    container_name: payment-db-karga
+    restart: always
+    secrets:
+      - payment_db_password
+
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/payment_db_password
+      POSTGRES_USER: karga
+      POSTGRES_DB: payment_db
+    volumes:
+      - payment-postgres-data:/var/lib/postgresql
+    networks:
+      - karga-network
+
+  trip-db:
+    image: postgres:18-alpine
+    container_name: trip-db-karga
+    restart: always
+    secrets:
+      - trip_db_password
+
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/trip_db_password
+      POSTGRES_USER: karga
+      POSTGRES_DB: trip_db
+    volumes:
+      - trip-postgres-data:/var/lib/postgresql
+    networks:
+      - karga-network
+
+  user-db:
+    image: postgres:18-alpine
+    container_name: user-db-karga
+    restart: always
+    secrets:
+      - user_db_password
+
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/user_db_password
+      POSTGRES_USER: karga
+      POSTGRES_DB: user_db
+    volumes:
+      - user-postgres-data:/var/lib/postgresql
+    networks:
+      - karga-network
+
+
+  # ----- REDIS START -----
+  karga-redis:
+    image: redis:7-alpine
+    container_name: karga-redis
+    restart: always
+    secrets:
+      - redis_username
+      - redis_password
+    command: >
+      /bin/sh -c "
+      mkdir -p /usr/local/etc/redis &&
+      echo 'user '$(cat /run/secrets/redis_username)' on >'$(cat /run/secrets/redis_password)' ~* +@all' > /usr/local/etc/redis/users.acl &&
+      redis-server --aclfile /usr/local/etc/redis/users.acl
+      "
+    ports:
+      - "6379:6379"
+    networks:
+      - karga-network
+
+  # ----- KAFKA START -----
+  karga-kafka:
+    image: apache/kafka:4.1.1
+    container_name: karga-kafka
+    restart: always
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      # 1. Dışarıdaki servisler (auth, driver) buraya 'kafka' ismiyle ulaşsın:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://karga-kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      # 2. KRİTİK DÜZELTME: Kendi kendine (Controller'a) 'localhost' üzerinden ulaşsın:
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+
+    networks:
+      - karga-network
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      # Sağlık kontrolünü de localhost üzerinden yapıyoruz
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+secrets:
+  auth_db_password:
+    file: ./secrets/auth_db_password
+  driver_db_password:
+    file: ./secrets/driver_db_password
+  payment_db_password:
+    file: ./secrets/payment_db_password
+  redis_password:
+    file: ./secrets/redis_password
+  redis_username:
+    file: ./secrets/redis_username
+  trip_db_password:
+    file: ./secrets/trip_db_password
+  user_db_password:
+    file: ./secrets/user_db_password
+  stripe_api_key:
+    file: ./secrets/stripe_api_key
+  stripe_webhook_secret:
+    file: ./secrets/stripe_webhook_secret
+  jwt_secret:
+    file: ./secrets/jwt_secret
+
+networks:
+  karga-network:
+    driver: bridge
+
+volumes:
+  auth-postgres-data:
+  driver-postgres-data:
+  payment-postgres-data:
+  trip-postgres-data:
+  user-postgres-data:
+  kafka-data:
+
+
