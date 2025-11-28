@@ -66,7 +66,7 @@ class DriverStatusServiceTest {
         assertThatThrownBy(() -> driverStatusService.updateDriverStatus(
                 testDriverId, DriverStatus.ONLINE, null, null))
                 .isInstanceOf(InvalidStatusException.class)
-                .hasMessageContaining("konum bilgisi zorunludur");
+                .hasMessageContaining("Location data is required");
 
         verify(valueOperations, never()).set(anyString(), anyString());
         verify(geoOperations, never()).add(anyString(), any(Point.class), anyString());

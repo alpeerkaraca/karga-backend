@@ -1,5 +1,7 @@
 package com.alpeerkaraca.paymentservice.controller;
 
+import com.alpeerkaraca.paymentservice.dto.PaymentMessage;
+import com.alpeerkaraca.paymentservice.infra.kafka.TripEventListener;
 import com.alpeerkaraca.paymentservice.service.StripePaymentService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -8,7 +10,9 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.MediaType;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -30,6 +34,14 @@ class PaymentWebhookControllerTest {
 
     @MockitoBean
     private StripePaymentService stripePaymentService;
+
+    @MockitoBean
+    private TripEventListener tripEventListener;
+
+    @MockitoBean
+    private KafkaTemplate<String, PaymentMessage> kafkaTemplate;
+    @MockitoBean
+    private RedisTemplate<String, String> redisTemplate;
 
     @Nested
     @DisplayName("POST /api/v1/payments/webhook - Webhook Processing")

@@ -1,4 +1,4 @@
-package com.alpeerkaraca.userservice.config;
+package com.alpeerkaraca.paymentservice.config;
 
 import com.alpeerkaraca.common.security.JWTAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
@@ -29,19 +29,22 @@ public class WebConfig {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(req -> req
-                        .requestMatchers("/api/v1/users/**").authenticated()
+
+                        .requestMatchers("/api/v1/payments/webhook").permitAll()
+
                         .requestMatchers(
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
-                                "/swagger-ui.html").permitAll()
+                                "/swagger-ui.html"
+                        ).permitAll()
                         .anyRequest().authenticated())
+
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
                 );
-
         return http.build();
     }
 }

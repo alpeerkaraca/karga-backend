@@ -24,14 +24,12 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CustomUserDetailsServiceTest {
 
+    private final String userEmail = "test@example.com";
     @Mock
     private UserRepository userRepository;
-
     @InjectMocks
     private CustomUserDetailsService customUserDetailsService;
-
     private User testUser;
-    private final String userEmail = "test@example.com";
 
     @BeforeEach
     void setUp() {
