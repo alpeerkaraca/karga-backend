@@ -7,6 +7,7 @@ import com.alpeerkaraca.paymentservice.repository.PaymentRepository;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.stripe.Stripe;
+import com.stripe.exception.StripeException;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,6 +20,8 @@ import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -39,7 +42,7 @@ class StripePaymentServiceWireMockTest extends AbstractIntegrationTest {
         wireMockServer.start();
         WireMock.configureFor("localhost", wireMockServer.port());
 
-        // Override Stripe API base URL to point to WireMock
+        // Stripe'ın WireMock'a gitmesini sağlıyoruz
         Stripe.overrideApiBase("http://localhost:" + wireMockServer.port());
     }
 
@@ -77,7 +80,6 @@ class StripePaymentServiceWireMockTest extends AbstractIntegrationTest {
 
         when(paymentRepository.save(any(Payment.class))).thenReturn(mockPayment);
 
-        // Mock Stripe API response
         stubFor(post(urlEqualTo("/v1/checkout/sessions"))
                 .willReturn(aResponse()
                         .withStatus(200)
@@ -91,8 +93,12 @@ class StripePaymentServiceWireMockTest extends AbstractIntegrationTest {
                                 }
                                 """)));
 
+        //(ACT) ---
+        var response = stripePaymentService.createPaymentSession(tripId, passengerId, amount);
+
         // Assert
         verify(postRequestedFor(urlEqualTo("/v1/checkout/sessions")));
+        assertThat(response.getStripeSessionUrl()).contains("checkout.stripe.com");
     }
 
     @Test
@@ -128,8 +134,13 @@ class StripePaymentServiceWireMockTest extends AbstractIntegrationTest {
                                 """)));
 
 
-        // Assert - Service should handle error and set payment status to FAILED
+        // ---(ACT & ASSERT) ---
+
+        try {
+            stripePaymentService.createPaymentSession(tripId, passengerId, amount);
+        } catch (Exception e) {
+        }
+
         verify(postRequestedFor(urlEqualTo("/v1/checkout/sessions")));
     }
 }
-

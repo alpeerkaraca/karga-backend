@@ -1,0 +1,9 @@
+.git
+.idea
+*.iml
+target
+**/target
+mvnw
+*.cmd
+*.log
+application.log

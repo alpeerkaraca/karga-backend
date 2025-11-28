@@ -41,7 +41,6 @@ build/
 
 # --- Spring Boot / Logs ---
 logs/
-*.log
 *.gz
 tms.log
 application.log
@@ -75,3 +74,6 @@ k8s/karga-secret.yaml
 *.bak
 *.swp
 *~
+
+# --- Secret Files ---
+secrets/

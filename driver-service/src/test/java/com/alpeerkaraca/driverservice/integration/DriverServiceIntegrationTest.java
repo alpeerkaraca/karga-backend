@@ -109,7 +109,7 @@ class DriverServiceIntegrationTest extends AbstractIntegrationTest {
         String status = redisTemplate.opsForValue().get(statusKey);
         assertThat(status).isEqualTo("ONLINE");
 
-        // Check geo location
+        // Check geolocation
         Long count = redisTemplate.opsForGeo().remove("online_drivers_locations", "550e8400-e29b-41d4-a716-446655440000");
         assertThat(count).isGreaterThanOrEqualTo(0);
     }

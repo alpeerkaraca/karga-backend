@@ -119,12 +119,14 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(message));
     }
+
     @ExceptionHandler(ActionNotAllowedException.class)
     public ResponseEntity<ApiResponse<Object>> handleActionNotAllowedException(ActionNotAllowedException ex) {
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.error(ex.getMessage()));
     }
+
     @ExceptionHandler(EmptyBodyException.class)
     public ResponseEntity<ApiResponse<Object>> handleEmptyBodyException(EmptyBodyException ex) {
         return ResponseEntity
