@@ -3,9 +3,12 @@ package com.alpeerkaraca.tripservice.service;
 import com.alpeerkaraca.common.exception.ConflictException;
 import com.alpeerkaraca.common.exception.ResourceNotFoundException;
 import com.alpeerkaraca.tripservice.dto.TripMessage;
+import com.alpeerkaraca.tripservice.factory.PricingStrategyFactory;
+import com.alpeerkaraca.tripservice.model.PricingType;
 import com.alpeerkaraca.tripservice.model.Trip;
 import com.alpeerkaraca.tripservice.model.TripStatus;
 import com.alpeerkaraca.tripservice.repository.TripRepository;
+import com.alpeerkaraca.tripservice.strategy.PricingStrategy;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -17,7 +20,6 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Service managing the entire lifecycle of a trip (Accept, Start, Complete, Cancel).
@@ -30,18 +32,12 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class TripManagementService {
     private static final String TOPIC_TRIP_EVENTS = "trip_events";
-
-    // TAXI FARE PRICING CONSTANTS
-    private static final double DISTANCE_FEE_PER_KM = 36.30;
-    private static final double TIME_FEE_PER_MIN = 7.56;
-    private static final double OPENING_FEE = 54.50;
-    private static final BigDecimal MINIMUM_FEE = BigDecimal.valueOf(175);
-
     private static final String TRIP_NOT_FOUND = "Trip not found: ";
-    private static final double EARTH_RADIUS_KM = 6371.0;
 
     private final TripRepository tripsRepository;
     private final KafkaTemplate<String, TripMessage> kafkaTemplate;
+
+    private final PricingStrategyFactory pricingStrategyFactory;
 
     /**
      * Retrieves a list of trips that are currently available for drivers to accept.
@@ -133,7 +129,10 @@ public class TripManagementService {
         } else {
             trip.setTripStatus(TripStatus.COMPLETED);
             trip.setEndedAt(Timestamp.from(Instant.now()));
-            BigDecimal fare = calculateFare(trip);
+
+            PricingType pricingType = PricingType.STANDARD; // This should be dynamic based on trip or passenger in the future.
+            PricingStrategy pricingStrategy = pricingStrategyFactory.getStrategy(pricingType);
+            BigDecimal fare = pricingStrategy.calculate(trip);
 
             trip.setFare(fare);
             tripsRepository.save(trip);
@@ -182,51 +181,5 @@ public class TripManagementService {
         }
     }
 
-    /**
-     * Calculates the total fare based on distance (Haversine formula) and time elapsed.
-     * Returns the minimum fee if the calculated fare is lower.
-     */
-    private BigDecimal calculateFare(Trip trip) {
-        if (trip.getTripStatus() != TripStatus.COMPLETED) {
-            return BigDecimal.ZERO;
-        }
-        long timeDifference = trip.getEndedAt().getTime() - trip.getStartedAt().getTime();
-        long elapsedMinutes = TimeUnit.MILLISECONDS.toMinutes(timeDifference);
 
-        double distanceInKm = calculateHaversineDistance(
-                trip.getStartLatitude(),
-                trip.getStartLongitude(),
-                trip.getEndLatitude(),
-                trip.getEndLongitude()
-        );
-
-        BigDecimal fare = BigDecimal.valueOf(OPENING_FEE)
-                .add(BigDecimal.valueOf(DISTANCE_FEE_PER_KM * distanceInKm))
-                .add(BigDecimal.valueOf(TIME_FEE_PER_MIN * elapsedMinutes));
-
-        if (fare.compareTo(MINIMUM_FEE) < 0) {
-            return MINIMUM_FEE;
-        }
-        return fare;
-    }
-
-    /**
-     * Calculates the great-circle distance between two points on a sphere using the Haversine formula.
-     */
-    private double calculateHaversineDistance(double startLat, double startLong, double endLat, double endLong) {
-        double dLat = Math.toRadians(endLat - startLat);
-        double dLon = Math.toRadians(endLong - startLong);
-
-        double startLatitudeRad = Math.toRadians(startLat);
-        double endLatitudeRad = Math.toRadians(endLat);
-
-        double squareOfHalfChordLength =
-                Math.pow(Math.sin(dLat / 2), 2) +
-                        Math.pow(Math.sin(dLon / 2), 2) *
-                                Math.cos(startLatitudeRad) * Math.cos(endLatitudeRad);
-
-        double angularDistanceInRadians = 2 * Math.asin(Math.sqrt(squareOfHalfChordLength));
-
-        return EARTH_RADIUS_KM * angularDistanceInRadians;
-    }
 }
