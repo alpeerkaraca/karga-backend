@@ -1,9 +1,11 @@
 package com.alpeerkaraca.common.security;
 
+import com.alpeerkaraca.common.exception.ExtractionException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.jspecify.annotations.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -24,8 +26,8 @@ public class JWTAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+                                    @NonNull HttpServletResponse response,
+                                    @NonNull FilterChain filterChain) throws ServletException, IOException {
         final String authorizationHeader = request.getHeader("Authorization");
         final String jwtToken;
         final String username;
@@ -36,13 +38,27 @@ public class JWTAuthenticationFilter extends OncePerRequestFilter {
         }
 
         jwtToken = getJwtFromRequest(request);
-        username = jwtService.extractUsername(jwtToken);
+        try {
+            username = jwtService.extractUsername(jwtToken);
+        } catch (Exception e) {
+            throw new ExtractionException("Failed to extract username from JWT token");
+        }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null
                 && jwtService.isTokenValid(jwtToken)) {
 
-            String userId = jwtService.extractUserId(jwtToken);
-            List<String> roles = jwtService.extractRoles(jwtToken);
+            String userId;
+            try {
+                userId = jwtService.extractUserId(jwtToken);
+            } catch (Exception e) {
+                throw new ExtractionException("Failed to extract ID from JWT token");
+            }
+            List<String> roles;
+            try {
+                roles = jwtService.extractRoles(jwtToken);
+            } catch (Exception e) {
+                throw new ExtractionException("Failed to extract roles from JWT token");
+            }
             UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                     userId,
                     null,

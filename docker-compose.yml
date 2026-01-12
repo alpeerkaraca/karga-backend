@@ -1,12 +1,29 @@
 version: '3.8'
 services:
+  # ----- NGINX REVERSE PROXY -----
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: karga-gateway
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - auth-service
+      - driver-service
+      - payment-service
+      - trip-service
+      - user-service
+    networks:
+      - karga-network
   # ----- Microservices Start -----
   auth-service:
     build:
       context: .
       dockerfile: auth-service/Dockerfile
-    ports:
-      - "8084:8084"
+    #    ports:
+    #      - "8084:8084"
     secrets:
       - auth_db_password
       - redis_username
@@ -25,8 +42,8 @@ services:
     build:
       context: .
       dockerfile: driver-service/Dockerfile
-    ports:
-      - "8085:8085"
+    #    ports:
+    #      - "8085:8085"
     secrets:
       - driver_db_password
       - redis_username
@@ -45,8 +62,8 @@ services:
     build:
       context: .
       dockerfile: payment-service/Dockerfile
-    ports:
-      - "8086:8086"
+    #    ports:
+    #      - "8086:8086"
     secrets:
       - payment_db_password
       - redis_username
@@ -67,8 +84,8 @@ services:
     build:
       context: .
       dockerfile: trip-service/Dockerfile
-    ports:
-      - "8087:8087"
+    #    ports:
+    #      - "8087:8087"
     secrets:
       - trip_db_password
       - redis_username
@@ -86,8 +103,8 @@ services:
     build:
       context: .
       dockerfile: user-service/Dockerfile
-    ports:
-      - "8088:8088"
+    #    ports:
+    #      - "8088:8088"
     secrets:
       - user_db_password
       - redis_username
@@ -142,6 +159,8 @@ services:
     restart: always
     secrets:
       - payment_db_password
+    ports:
+      - "5435:5432"
 
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/payment_db_password

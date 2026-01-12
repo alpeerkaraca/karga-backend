@@ -195,7 +195,7 @@ class AuthControllerTest extends AbstractIntegrationTest {
             // Act & Assert
             mockMvc.perform(post("/api/v1/auth/register")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("invalid-json"))
+                            .content("\"invalid-json\""))
                     .andExpect(status().isBadRequest());
         }
 
@@ -355,7 +355,7 @@ class AuthControllerTest extends AbstractIntegrationTest {
             // Act & Assert
             mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("invalid-json"))
+                            .content("\"invalid-json\""))
                     .andExpect(status().isBadRequest());
         }
 

@@ -36,6 +36,7 @@ public class WebConfig {
                         .requestMatchers("/api/v1/trips/request").hasAnyRole("PASSENGER", "ADMIN")
                         .requestMatchers(
                                 "/api/v1/trips/nearby-drivers",
+                                "/api/v1/trips/request",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html").permitAll()

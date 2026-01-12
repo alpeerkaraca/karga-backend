@@ -2,7 +2,6 @@ package com.alpeerkaraca.authservice.controller;
 
 import com.alpeerkaraca.authservice.dto.UserLoginRequest;
 import com.alpeerkaraca.authservice.dto.UserRegisterRequest;
-import com.alpeerkaraca.authservice.repository.UserRepository;
 import com.alpeerkaraca.authservice.service.AuthService;
 import com.alpeerkaraca.common.annotation.RateLimit;
 import com.alpeerkaraca.common.dto.ApiResponse;
@@ -21,7 +20,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/auth")
 public class AuthController {
     private final AuthService authService;
-    private final UserRepository userRepository;
 
     @RateLimit(key = "register", limit = 3, duration = 3600)
     @PostMapping("/register")
@@ -35,7 +33,7 @@ public class AuthController {
                 );
     }
 
-    @RateLimit(key = "login", limit = 5, duration = 60)
+    @RateLimit(key = "login", limit = 5, duration = 120)
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<TokenPair>> loginUser(@Valid @RequestBody UserLoginRequest request) {
         TokenPair tokenPair = authService.login(request);

@@ -63,6 +63,8 @@ application.log
 *.csr
 *.keystore
 *.truststore
+*.der
+*/**.der
 
 # --- Kubernetes Generated Files ---
 # Eğer k8s klasöründe otomatik oluşan dosyalar varsa buraya ekle.

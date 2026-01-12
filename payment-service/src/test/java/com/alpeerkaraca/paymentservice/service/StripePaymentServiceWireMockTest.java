@@ -7,6 +7,7 @@ import com.alpeerkaraca.paymentservice.repository.PaymentRepository;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.stripe.Stripe;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+@Slf4j
 @SpringBootTest
 class StripePaymentServiceWireMockTest extends AbstractIntegrationTest {
 
@@ -141,6 +143,7 @@ class StripePaymentServiceWireMockTest extends AbstractIntegrationTest {
         try {
             stripePaymentService.createPaymentSession(tripId, passengerId, amount);
         } catch (Exception e) {
+            log.error(e.getMessage());
         }
 
         verify(postRequestedFor(urlEqualTo("/v1/checkout/sessions")));

@@ -130,7 +130,7 @@ class AuthServiceTest {
 
     @Test
     @DisplayName("Should login user successfully with valid credentials")
-    void login_ValidCredentials_Success() {
+    void login_ValidCredentials_Success() throws Exception {
         // Arrange
         Authentication authentication = new UsernamePasswordAuthenticationToken(
                 loginRequest.getEmail(),
@@ -193,7 +193,7 @@ class AuthServiceTest {
 
     @Test
     @DisplayName("Should refresh token successfully with valid refresh token")
-    void refreshToken_ValidToken_Success() {
+    void refreshToken_ValidToken_Success() throws Exception {
         // Arrange
         RefreshTokenRequest refreshTokenRequest = new RefreshTokenRequest("validRefreshToken");
         UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()

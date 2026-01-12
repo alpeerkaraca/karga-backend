@@ -56,7 +56,6 @@ class DriverServiceIntegrationTest extends AbstractIntegrationTest {
     private KafkaTemplate<String, DriverLocationMessage> locationKafkaTemplate;
     @Autowired
     private KafkaTemplate<String, TripMessage> tripKafkaTemplate;
-    private Driver testDriver;
     private UUID testDriverId;
 
 
@@ -80,13 +79,13 @@ class DriverServiceIntegrationTest extends AbstractIntegrationTest {
 
         // Create test driver
         testDriverId = UUID.randomUUID();
-        testDriver = Driver.builder()
+        Driver testDriver = Driver.builder()
                 .driverId(testDriverId)
                 .vehicle(vehicle)
                 .isApproved(true)
                 .isActive(true)
                 .build();
-        testDriver = driverRepository.save(testDriver);
+        driverRepository.save(testDriver);
     }
 
     @Test

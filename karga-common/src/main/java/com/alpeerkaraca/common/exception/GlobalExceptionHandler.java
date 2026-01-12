@@ -34,7 +34,7 @@ public class GlobalExceptionHandler {
         );
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.errorWithDetails("Girdi doğrulaması başarısız.", errors));
+                .body(ApiResponse.errorWithDetails("Input validation failed.", errors));
     }
 
 
@@ -86,7 +86,7 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("JSON format hatası veya geçersiz veri tipi."));
+                .body(ApiResponse.error("Invalid JSON or data type."));
     }
 
     @ExceptionHandler(InvalidStatusException.class)
@@ -150,13 +150,38 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
+    @ExceptionHandler(KeyLoadingException.class)
+    public ResponseEntity<ApiResponse<Object>> handleKeyLoadingException(KeyLoadingException ex) {
+        log.error("Key Loading Error: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(TokenGenerationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleTokenGenerationException(TokenGenerationException ex) {
+        log.error("Token Generation Error: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(ExtractionException.class)
+    public ResponseEntity<ApiResponse<Object>> handleExtractionException(ExtractionException ex) {
+        log.error("Token Extraction Error: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleException(Exception ex) {
-        log.error("Genel Hata Yakalandı {}", ex.getMessage());
+        log.error("Unhandled Error Caught {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 // TODO REMOVE THIS LINE
-//                .body(ApiResponse.error("Sunucuda beklenmedik bir hata oluştu. Lütfen daha sonra tekrar deneyin."));
+//                .body(ApiResponse.error("Unexpected error occured on our side. Please try again later."));
                 .body(ApiResponse.error(ex.getMessage()));
     }
 

@@ -43,7 +43,7 @@ public class TripsController {
                 .status(HttpStatus.OK)
                 .body(ApiResponse.success(
                         nearbyDrivers,
-                        "Yakındaki sürücüler listelendi."
+                        "Nearby drivers listed."
                 ));
 
     }
@@ -54,18 +54,18 @@ public class TripsController {
         UUID userId = UUID.fromString(passengerIdString);
         Trip trip = tripRequestService.requestTrip(request, userId);
 
-        return ApiResponse.success(trip, "Yolculuk talebiniz alındı.");
+        return ApiResponse.success(trip, "Trip request received.");
     }
 
     @GetMapping("/available")
     public ApiResponse<List<Trip>> getAvailableTrips() {
         List<Trip> trips = tripManagementService.getAvailableTrips();
-        return ApiResponse.success(trips, "Mevcut yolculuklar listelendi.");
+        return ApiResponse.success(trips, "Available trips listed.");
     }
 
     @PreAuthorize("hasRole('DRIVER')")
     @PostMapping("/{tripId}/accept")
-    public ResponseEntity<ApiResponse<Trip>> acceptTrip(@PathVariable("tripId") UUID tripId) {
+    public ResponseEntity<ApiResponse<Trip>> acceptTrip(@PathVariable UUID tripId) {
         String driverIdStr = SecurityContextHolder.getContext().getAuthentication().getName();
         UUID driverID = UUID.fromString(driverIdStr);
         Trip trip = tripManagementService.acceptTrip(tripId, driverID);
@@ -73,20 +73,20 @@ public class TripsController {
     }
 
     @PostMapping("/{tripId}/start")
-    public ApiResponse<Void> startTrip(@PathVariable("tripId") UUID tripId) {
+    public ApiResponse<Void> startTrip(@PathVariable UUID tripId) {
         tripManagementService.startTrip(tripId);
-        return ApiResponse.success(null, "Yolculuk başlatıldı.");
+        return ApiResponse.success(null, "Trip started.");
     }
 
     @PostMapping("/{tripId}/complete")
-    public ApiResponse<Void> completeTrip(@PathVariable("tripId") UUID tripId) {
+    public ApiResponse<Void> completeTrip(@PathVariable UUID tripId) {
         tripManagementService.completeTrip(tripId);
-        return ApiResponse.success(null, "Yolculuk tamamlandı.");
+        return ApiResponse.success(null, "Trip completed.");
     }
 
     @PostMapping("/{tripId}/cancel")
-    public ApiResponse<Void> cancelTrip(@PathVariable("tripId") UUID tripId) {
+    public ApiResponse<Void> cancelTrip(@PathVariable UUID tripId) {
         tripManagementService.cancelTrip(tripId);
-        return ApiResponse.success(null, "Yolculuk iptal edildi.");
+        return ApiResponse.success(null, "Trip cancelled.");
     }
 }

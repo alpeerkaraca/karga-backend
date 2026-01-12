@@ -14,6 +14,7 @@ import com.alpeerkaraca.common.exception.InvalidTokenException;
 import com.alpeerkaraca.common.security.JWTService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -23,6 +24,9 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.UUID;
 
@@ -33,6 +37,7 @@ import java.util.UUID;
  * refreshing tokens, and publishing post-registration Kafka events.
  * </p>
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -55,23 +60,33 @@ public class AuthService {
      * @return The saved {@link User} entity.
      * @throws ConflictException If the provided email address is already registered.
      */
+    @Transactional
     public User registerUser(@Valid UserRegisterRequest request) {
         userRepository.findByEmail(request.getEmail()).ifPresent(user -> {
             throw new ConflictException("Email already in use");
         });
+        String encodedPassword = passwordEncoder.encode(request.getPassword());
         User user = User.builder()
                 .email(request.getEmail().toLowerCase())
-                .password(passwordEncoder.encode(request.getPassword()))
+                .password(encodedPassword)
                 .role(Role.PASSENGER)
                 .isActive(false)
                 .build();
-        var savedUser = userRepository.save(user);
+        final User savedUser = userRepository.save(user);
+
 
         // Publish Kafka event asynchronously
-        publishUserCreatedEvent(
-                savedUser.getUserId(), savedUser.getEmail(),
-                request.getFirstName(), request.getLastName(),
-                request.getPhoneNumber()
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        publishUserCreatedEvent(
+                                savedUser.getUserId(), savedUser.getEmail(),
+                                request.getFirstName(), request.getLastName(),
+                                request.getPhoneNumber()
+                        );
+                    }
+                }
         );
         return savedUser;
     }
@@ -132,7 +147,9 @@ public class AuthService {
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
         // Fetching User ID again incurs DB cost but is necessary for token consistency.
-        return jwtService.generateTokenPair(authentication, userRepository.findByEmail(username).get().getUserId());
+        User user = userRepository.findByEmail(username)
+                .orElseThrow(() -> new InvalidTokenException("Credentials could not be verified. Please login again."));
+        return jwtService.generateTokenPair(authentication, user.getUserId());
     }
 
     /**

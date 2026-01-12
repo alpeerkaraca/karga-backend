@@ -32,7 +32,7 @@ public abstract class AbstractIntegrationTest {
     //  Kafka Container
     @Container
     @ServiceConnection
-    static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("apache/kafka"));
+    static final KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("apache/kafka"));
 
     public static KafkaContainer getKafkaContainer() {
         return kafka;

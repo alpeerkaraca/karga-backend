@@ -1,18 +1,16 @@
 package com.alpeerkaraca.common.security;
 
 import com.alpeerkaraca.common.dto.TokenPair;
+import com.alpeerkaraca.common.exception.TokenGenerationException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.io.Decoders;
-import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.SecretKey;
 import java.util.*;
 import java.util.function.Function;
 
@@ -28,12 +26,15 @@ import java.util.function.Function;
 @Slf4j
 public class JWTService {
 
-    @Value("${app.jwt.secret}")
-    private String jwtSecret;
     @Value("${app.jwt.expiration}")
     private long jwtExpirationMs;
     @Value("${app.jwt.refresh-expiration}")
     private long refreshTokenExpirationMs;
+    private final KeyLoader keyLoader;
+
+    public JWTService(KeyLoader keyLoader) {
+        this.keyLoader = keyLoader;
+    }
 
     /**
      * Generates an Access and Refresh token pair for an authenticated user.
@@ -47,20 +48,24 @@ public class JWTService {
      * @return A {@link TokenPair} object containing the generated accessToken and refreshToken.
      */
     public TokenPair generateTokenPair(Authentication authentication, UUID userId) {
-        List<String> roles = authentication.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .toList();
+        try {
+            List<String> roles = authentication.getAuthorities().stream()
+                    .map(GrantedAuthority::getAuthority)
+                    .toList();
 
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", userId.toString());
-        claims.put("roles", roles);
+            Map<String, Object> claims = new HashMap<>();
+            claims.put("userId", userId.toString());
+            claims.put("roles", roles);
 
-        String username = authentication.getName();
+            String username = authentication.getName();
 
-        String accessToken = generateToken(claims, username, jwtExpirationMs);
-        String refreshToken = generateToken(Map.of("tokenType", "refresh"), username, refreshTokenExpirationMs);
+            String accessToken = generateToken(claims, username, jwtExpirationMs);
+            String refreshToken = generateToken(Map.of("tokenType", "refresh"), username, refreshTokenExpirationMs);
 
-        return new TokenPair(accessToken, refreshToken);
+            return new TokenPair(accessToken, refreshToken);
+        } catch (Exception e) {
+            throw new TokenGenerationException("Error while generating token pair", e);
+        }
     }
 
     /**
@@ -74,6 +79,10 @@ public class JWTService {
             return !isTokenExpired(token);
         } catch (JwtException | IllegalArgumentException e) {
             log.error("JWT validation failed: {}", e.getMessage());
+            return false;
+        } catch (Exception e) {
+            log.error("Error while JWT validation due to: {}", e.getMessage());
+
             return false;
         }
     }
@@ -142,17 +151,19 @@ public class JWTService {
     public boolean isRefreshToken(String token) {
         try {
             return "refresh".equals(extractAllClaims(token).get("tokenType"));
-        } catch (JwtException e) {
+        } catch (Exception e) {
             return false;
         }
     }
 
     private Claims extractAllClaims(String token) {
         return Jwts.parser()
-                .verifyWith(getSignInKey())
+                .verifyWith(keyLoader.loadPublicKey())
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+
+
     }
 
     public String generateToken(Map<String, Object> extraClaims, String subject, long expirationMs) {
@@ -161,12 +172,8 @@ public class JWTService {
                 .subject(subject)
                 .issuedAt(new Date(System.currentTimeMillis()))
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
-                .signWith(getSignInKey())
+                .signWith(keyLoader.loadPrivateKey())
                 .compact();
     }
 
-    private SecretKey getSignInKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
-        return Keys.hmacShaKeyFor(keyBytes);
-    }
 }

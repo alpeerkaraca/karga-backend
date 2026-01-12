@@ -60,13 +60,12 @@ class TripsControllerTest {
     @MockitoBean
     private RedisTemplate<String, String> redisTemplate;
 
-    private UUID testPassengerId;
     private UUID testTripId;
     private Trip testTrip;
 
     @BeforeEach
     void setUp() {
-        testPassengerId = UUID.randomUUID();
+        UUID testPassengerId = UUID.randomUUID();
         testTripId = UUID.randomUUID();
 
         testTrip = Trip.builder()

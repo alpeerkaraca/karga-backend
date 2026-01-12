@@ -42,7 +42,7 @@ class AuthServiceIT extends AbstractIntegrationTest {
 
     @Test
     @DisplayName("Should register and login user successfully - Full flow")
-    void registerAndLogin_Success() {
+    void registerAndLogin_Success() throws Exception {
         // Arrange
         UserRegisterRequest registerRequest = UserRegisterRequest.builder()
                 .email("integration@test.com")
