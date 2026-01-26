@@ -79,3 +79,4 @@ k8s/karga-secret.yaml
 
 # --- Secret Files ---
 secrets/
+**/secrets/**

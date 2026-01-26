@@ -1,23 +1,28 @@
 package com.alpeerkaraca.tripservice.service;
 
+import com.alpeerkaraca.common.event.TripMessage;
 import com.alpeerkaraca.common.exception.ConflictException;
 import com.alpeerkaraca.common.exception.ResourceNotFoundException;
-import com.alpeerkaraca.tripservice.dto.TripMessage;
+import com.alpeerkaraca.common.exception.SerializationException;
+import com.alpeerkaraca.common.model.TripEventTypes;
 import com.alpeerkaraca.tripservice.factory.PricingStrategyFactory;
 import com.alpeerkaraca.tripservice.model.PricingType;
 import com.alpeerkaraca.tripservice.model.Trip;
+import com.alpeerkaraca.tripservice.model.TripOutbox;
 import com.alpeerkaraca.tripservice.model.TripStatus;
+import com.alpeerkaraca.tripservice.repository.TripOutboxRepository;
 import com.alpeerkaraca.tripservice.repository.TripRepository;
 import com.alpeerkaraca.tripservice.strategy.PricingStrategy;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.kafka.core.KafkaTemplate;
+import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,13 +35,13 @@ import java.util.UUID;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TripManagementService {
-    private static final String TOPIC_TRIP_EVENTS = "trip_events";
     private static final String TRIP_NOT_FOUND = "Trip not found: ";
 
     private final TripRepository tripsRepository;
-    private final KafkaTemplate<String, TripMessage> kafkaTemplate;
-
+    private final TripOutboxRepository tripOutboxRepository;
+    private final ObjectMapper objectMapper;
     private final PricingStrategyFactory pricingStrategyFactory;
 
     /**
@@ -72,19 +77,10 @@ public class TripManagementService {
 
         trip.setDriverId(driverId);
         trip.setTripStatus(TripStatus.ACCEPTED);
-        trip.setStartedAt(Timestamp.from(Instant.now())); // Usually marks acceptance time here
+        trip.setStartedAt(Instant.now());
         Trip savedTrip = tripsRepository.save(trip);
 
-        TripMessage kafkaMessage = TripMessage.builder()
-                .eventType("TRIP_ACCEPTED")
-                .tripId(tripId)
-                .driverId(driverId)
-                .passengerId(savedTrip.getPassengerId())
-                .timestamp(Timestamp.valueOf(LocalDateTime.now()))
-                .fare(new BigDecimal(0))
-                .build();
-        kafkaTemplate.send(TOPIC_TRIP_EVENTS, kafkaMessage);
-
+        readyEvent(tripId, TripEventTypes.TRIP_ACCEPTED, savedTrip, BigDecimal.ZERO);
         return savedTrip;
     }
 
@@ -94,26 +90,17 @@ public class TripManagementService {
      *
      * @param tripId UUID of the trip.
      */
+    @Transactional
     public void startTrip(UUID tripId) {
         Trip trip = tripsRepository.findById(tripId).orElseThrow(() -> new ResourceNotFoundException(TRIP_NOT_FOUND + tripId));
         if (trip.getTripStatus() != TripStatus.ACCEPTED) {
             throw new ConflictException("Trip can not be started. Trip status must be ACCEPTED.");
         } else {
             trip.setTripStatus(TripStatus.IN_PROGRESS);
-            trip.setStartedAt(Timestamp.from(Instant.now()));
+            trip.setStartedAt(Instant.now());
             tripsRepository.save(trip);
 
-            TripMessage kafkaMessage = TripMessage.builder()
-                    .eventType("TRIP_STARTED")
-                    .tripId(tripId)
-                    .driverId(trip.getDriverId())
-                    .passengerId(trip.getPassengerId())
-                    .timestamp(Timestamp.valueOf(LocalDateTime.now()))
-                    .fare(new BigDecimal(0))
-                    .currentLongitude(trip.getStartLongitude())
-                    .currentLatitude(trip.getStartLatitude())
-                    .build();
-            kafkaTemplate.send(TOPIC_TRIP_EVENTS, kafkaMessage);
+            readyEvent(tripId, TripEventTypes.TRIP_STARTED, trip, BigDecimal.ZERO);
         }
     }
 
@@ -122,13 +109,14 @@ public class TripManagementService {
      *
      * @param tripId UUID of the trip.
      */
+    @Transactional
     public void completeTrip(UUID tripId) {
         Trip trip = tripsRepository.findById(tripId).orElseThrow(() -> new ResourceNotFoundException(TRIP_NOT_FOUND + tripId));
         if (trip.getTripStatus() != TripStatus.IN_PROGRESS) {
             throw new ConflictException("Trip can not be completed. Trip status must be started.");
         } else {
             trip.setTripStatus(TripStatus.COMPLETED);
-            trip.setEndedAt(Timestamp.from(Instant.now()));
+            trip.setEndedAt(Instant.now());
 
             PricingType pricingType = PricingType.STANDARD; // This should be dynamic based on trip or passenger in the future.
             PricingStrategy pricingStrategy = pricingStrategyFactory.getStrategy(pricingType);
@@ -136,18 +124,7 @@ public class TripManagementService {
 
             trip.setFare(fare);
             tripsRepository.save(trip);
-
-            TripMessage kafkaMessage = TripMessage.builder()
-                    .eventType("TRIP_COMPLETED")
-                    .tripId(tripId)
-                    .driverId(trip.getDriverId())
-                    .passengerId(trip.getPassengerId())
-                    .timestamp(Timestamp.valueOf(LocalDateTime.now()))
-                    .fare(fare)
-                    .currentLongitude(trip.getEndLongitude())
-                    .currentLatitude(trip.getEndLatitude())
-                    .build();
-            kafkaTemplate.send(TOPIC_TRIP_EVENTS, kafkaMessage);
+            readyEvent(tripId, TripEventTypes.TRIP_COMPLETED, trip, fare);
         }
     }
 
@@ -156,6 +133,7 @@ public class TripManagementService {
      *
      * @param tripId UUID of the trip.
      */
+    @Transactional
     public void cancelTrip(UUID tripId) {
         Trip trip = tripsRepository.findById(tripId).orElseThrow(() -> new ResourceNotFoundException(TRIP_NOT_FOUND + tripId));
         if (trip.getTripStatus() == TripStatus.COMPLETED) {
@@ -164,22 +142,42 @@ public class TripManagementService {
             throw new ConflictException("Trip has already been cancelled.");
         } else {
             trip.setTripStatus(TripStatus.CANCELLED);
-            trip.setEndedAt(Timestamp.from(Instant.now()));
+            trip.setEndedAt(Instant.now());
             tripsRepository.save(trip);
-
-            TripMessage kafkaMessage = TripMessage.builder()
-                    .eventType("TRIP_CANCELLED")
-                    .tripId(tripId)
-                    .driverId(trip.getDriverId())
-                    .passengerId(trip.getPassengerId())
-                    .timestamp(Timestamp.valueOf(LocalDateTime.now()))
-                    .fare(new BigDecimal(0))
-                    .currentLongitude(trip.getStartLongitude())
-                    .currentLatitude(trip.getStartLatitude())
-                    .build();
-            kafkaTemplate.send(TOPIC_TRIP_EVENTS, kafkaMessage);
+            readyEvent(tripId, TripEventTypes.TRIP_CANCELLED, trip, BigDecimal.ZERO);
         }
     }
 
+    /**
+     * Helper method to prepare and save a trip event to the outbox.
+     *
+     * @param tripId    ID of the trip
+     * @param eventType Type of the event
+     * @param trip      Trip entity
+     * @param fare      Calculated fare
+     */
+    private void readyEvent(UUID tripId, TripEventTypes eventType, @NonNull Trip trip, BigDecimal fare) {
+        TripMessage kafkaMessage = TripMessage.builder()
+                .eventType(eventType)
+                .tripId(tripId)
+                .driverId(trip.getDriverId())
+                .passengerId(trip.getPassengerId())
+                .createdAt(Instant.now())
+                .fare(fare)
+                .currentLongitude(trip.getTripStatus() == TripStatus.COMPLETED ? trip.getEndLongitude() : trip.getStartLongitude())
+                .currentLatitude(trip.getTripStatus() == TripStatus.COMPLETED ? trip.getEndLatitude() : trip.getStartLatitude())
+                .build();
+        TripOutbox outbox = new TripOutbox();
+        outbox.setAggregateType("TRIP");
+        outbox.setAggregateId(tripId.toString());
+        outbox.setEventType(eventType.toString());
 
+        try {
+            outbox.setPayload(objectMapper.writeValueAsString(kafkaMessage));
+        } catch (JsonProcessingException e) {
+            log.error("Event serialization error for TripID: {}", tripId, e);
+            throw new SerializationException("Error while serializing data");
+        }
+        tripOutboxRepository.save(outbox);
+    }
 }

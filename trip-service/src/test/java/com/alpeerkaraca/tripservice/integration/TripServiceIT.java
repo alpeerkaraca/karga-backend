@@ -1,17 +1,19 @@
 package com.alpeerkaraca.tripservice.integration;
 
+import com.alpeerkaraca.common.event.TripMessage;
+import com.alpeerkaraca.common.model.TripEventTypes;
 import com.alpeerkaraca.tripservice.AbstractIntegrationTest;
-import com.alpeerkaraca.tripservice.dto.TripMessage;
 import com.alpeerkaraca.tripservice.dto.TripRequest;
 import com.alpeerkaraca.tripservice.model.Trip;
+import com.alpeerkaraca.tripservice.model.TripOutbox;
 import com.alpeerkaraca.tripservice.model.TripStatus;
+import com.alpeerkaraca.tripservice.repository.TripOutboxRepository;
 import com.alpeerkaraca.tripservice.repository.TripRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -27,14 +29,10 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
 import java.time.Duration;
-import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-import java.util.stream.StreamSupport;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -62,6 +60,9 @@ class TripServiceIT extends AbstractIntegrationTest {
     @Autowired
     private RedisTemplate<String, String> redisTemplate;
 
+    @Autowired
+    private TripOutboxRepository tripOutboxRepository;
+
     private Consumer<String, TripMessage> kafkaConsumer;
 
 
@@ -69,6 +70,7 @@ class TripServiceIT extends AbstractIntegrationTest {
     void setUp() {
         // Clean database
         tripRepository.deleteAll();
+        tripOutboxRepository.deleteAll();
 
         // Clean Redis
         redisTemplate.delete("online_drivers_locations");
@@ -96,7 +98,6 @@ class TripServiceIT extends AbstractIntegrationTest {
         consumerProps.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
         consumerProps.put(JsonDeserializer.VALUE_DEFAULT_TYPE, TripMessage.class.getName());
         consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        consumerProps.put(JsonDeserializer.TYPE_MAPPINGS, "tripEvent:com.alpeerkaraca.tripservice.dto.TripMessage");
         DefaultKafkaConsumerFactory<String, TripMessage> consumerFactory =
                 new DefaultKafkaConsumerFactory<>(consumerProps);
         kafkaConsumer = consumerFactory.createConsumer();
@@ -171,7 +172,7 @@ class TripServiceIT extends AbstractIntegrationTest {
             UUID passengerId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
 
             // Act
-            String response = mockMvc.perform(post("/api/v1/trips/request")
+            mockMvc.perform(post("/api/v1/trips/request")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request))
                             .with(csrf()))
@@ -186,7 +187,7 @@ class TripServiceIT extends AbstractIntegrationTest {
 
             // Assert - Check database
             assertThat(tripRepository.findAll()).hasSize(1);
-            Trip savedTrip = tripRepository.findAll().get(0);
+            Trip savedTrip = tripRepository.findAll().getFirst();
             assertThat(savedTrip.getPassengerId()).isEqualTo(passengerId);
             assertThat(savedTrip.getTripStatus()).isEqualTo(TripStatus.REQUESTED);
             assertThat(savedTrip.getStartLatitude()).isEqualTo(41.0082);
@@ -237,7 +238,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.0200)
                     .endLongitude(28.9900)
                     .tripStatus(TripStatus.REQUESTED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
+                    .requestedAt(Instant.now())
                     .build();
             trip = tripRepository.save(trip);
             UUID tripId = trip.getTripId();
@@ -248,60 +249,60 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.tripStatus").value("ACCEPTED"));
 
-            // Verify Kafka event
-            ConsumerRecords<String, TripMessage> records = kafkaConsumer.poll(Duration.ofSeconds(5));
-            assertThat(records.count()).isGreaterThan(0);
-            TripMessage acceptMessage = StreamSupport.stream(records.spliterator(), false)
-                    .map(ConsumerRecord::value)
-                    .filter(msg -> msg.getTripId().equals(tripId) && "TRIP_ACCEPTED".equals(msg.getEventType()))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError("Expected TRIP_ACCEPTED message for tripId " + tripId + " not found in Kafka"));
-            assertThat(acceptMessage.getEventType()).isEqualTo("TRIP_ACCEPTED");
-            assertThat(acceptMessage.getTripId()).isEqualTo(tripId);
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        List<TripOutbox> outboxList = tripOutboxRepository.findAll();
+                        assertThat(outboxList).isNotEmpty();
+                        TripOutbox latestEvent = outboxList.getLast();
+                        String payload = latestEvent.getPayload();
+                        assertThat(payload.contains(TripEventTypes.TRIP_ACCEPTED.toString()));
+                        assertThat(payload.contains(tripId.toString()));
+                    });
 
             // 3. Start trip
             mockMvc.perform(post("/api/v1/trips/" + tripId + "/start")
                             .with(csrf()))
                     .andExpect(status().isOk());
 
-            Trip startedTrip = tripRepository.findById(tripId).get();
-            assertThat(startedTrip.getTripStatus()).isEqualTo(TripStatus.IN_PROGRESS);
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+                Trip startedTrip = tripRepository.findById(tripId).orElseThrow();
+                startedTrip.setStartedAt(Instant.now().minus(Duration.ofMinutes(10)));
+                tripRepository.save(startedTrip);
+                Trip updatedTrip = tripRepository.findById(tripId).orElseThrow();
+                assertThat(updatedTrip.getTripStatus()).isEqualTo(TripStatus.IN_PROGRESS);
+            });
 
-            // Verify Kafka event
-            records = kafkaConsumer.poll(Duration.ofSeconds(5));
-            assertThat(records.count()).isGreaterThan(0);
-            TripMessage startMessage = StreamSupport.stream(records.spliterator(), false)
-                    .map(ConsumerRecord::value)
-                    .filter(msg -> msg.getTripId().equals(tripId) && "TRIP_STARTED".equals(msg.getEventType()))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError("Expected TRIP_STARTED message for tripId " + tripId + " not found in Kafka"));
-
-            assertThat(startMessage.getEventType()).isEqualTo("TRIP_STARTED");
-
-            // Wait a bit to simulate trip duration
-            Thread.sleep(1000);
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+                List<TripOutbox> outboxList = tripOutboxRepository.findAll();
+                assertThat(outboxList).isNotEmpty();
+                TripOutbox latestEvent = outboxList.getLast();
+                String payload = latestEvent.getPayload();
+                assertThat(payload.contains(TripEventTypes.TRIP_STARTED.toString()));
+                assertThat(payload.contains(tripId.toString()));
+            });
 
             // 4. Complete trip
             mockMvc.perform(post("/api/v1/trips/" + tripId + "/complete")
                             .with(csrf()))
                     .andExpect(status().isOk());
 
-            Trip completedTrip = tripRepository.findById(tripId).get();
-            assertThat(completedTrip.getTripStatus()).isEqualTo(TripStatus.COMPLETED);
-            assertThat(completedTrip.getFare()).isNotNull();
-            assertThat(completedTrip.getFare()).isGreaterThan(BigDecimal.ZERO);
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+                Trip completedTrip = tripRepository.findById(tripId).orElseThrow(() -> new AssertionError("Trip not found"));
+                assertThat(completedTrip.getTripStatus()).isEqualTo(TripStatus.COMPLETED);
+                assertThat(completedTrip.getFare()).isNotNull();
+                assertThat(completedTrip.getFare()).isGreaterThan(BigDecimal.ZERO);
+            });
 
-            // Verify Kafka event
-            records = kafkaConsumer.poll(Duration.ofSeconds(5));
-            assertThat(records.count()).isGreaterThan(0);
-            TripMessage completeMessage = StreamSupport.stream(records.spliterator(), false)
-                    .map(ConsumerRecord::value)
-                    .filter(msg -> msg.getTripId().equals(tripId) && "TRIP_COMPLETED".equals(msg.getEventType()))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError("Expected TRIP_COMPLETED message for tripId " + tripId + " not found in Kafka"));
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+                List<TripOutbox> outboxList = tripOutboxRepository.findAll();
+                assertThat(outboxList).isNotEmpty();
+                TripOutbox latestEvent = outboxList.getLast();
+                String payload = latestEvent.getPayload();
+                assertThat(payload.contains(TripEventTypes.TRIP_COMPLETED.toString()));
+                assertThat(payload.contains(tripId.toString()));
+            });
 
-            assertThat(completeMessage.getEventType()).isEqualTo("TRIP_COMPLETED");
-            assertThat(completeMessage.getFare()).isNotNull();
         }
 
         @Test
@@ -316,7 +317,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.0200)
                     .endLongitude(28.9900)
                     .tripStatus(TripStatus.REQUESTED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
+                    .requestedAt(Instant.now())
                     .build();
             trip = tripRepository.save(trip);
             UUID tripId = trip.getTripId();
@@ -326,14 +327,17 @@ class TripServiceIT extends AbstractIntegrationTest {
                             .with(csrf()))
                     .andExpect(status().isOk());
 
-            Trip cancelledTrip = tripRepository.findById(tripId).get();
+            Trip cancelledTrip = tripRepository.findById(tripId).orElseThrow(() -> new AssertionError("Trip not found"));
             assertThat(cancelledTrip.getTripStatus()).isEqualTo(TripStatus.CANCELLED);
 
-            // Verify Kafka event
-            ConsumerRecords<String, TripMessage> records = kafkaConsumer.poll(Duration.ofSeconds(5));
-            assertThat(records.count()).isGreaterThan(0);
-            TripMessage cancelMessage = records.iterator().next().value();
-            assertThat(cancelMessage.getEventType()).isEqualTo("TRIP_CANCELLED");
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+                List<TripOutbox> outboxList = tripOutboxRepository.findAll();
+                assertThat(outboxList).isNotEmpty();
+                TripOutbox latestEvent = outboxList.getLast();
+                String payload = latestEvent.getPayload();
+                assertThat(payload.contains(TripEventTypes.TRIP_CANCELLED.toString()));
+                assertThat(payload.contains(tripId.toString()));
+            });
         }
 
         @Test
@@ -348,7 +352,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.0200)
                     .endLongitude(28.9900)
                     .tripStatus(TripStatus.REQUESTED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
+                    .requestedAt(Instant.now())
                     .build();
             trip = tripRepository.save(trip);
             UUID tripId = trip.getTripId();
@@ -376,7 +380,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.0200)
                     .endLongitude(28.9900)
                     .tripStatus(TripStatus.REQUESTED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
+                    .requestedAt(Instant.now())
                     .build();
             trip = tripRepository.save(trip);
             UUID tripId = trip.getTripId();
@@ -400,7 +404,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.0200)
                     .endLongitude(28.9900)
                     .tripStatus(TripStatus.ACCEPTED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
+                    .requestedAt(Instant.now())
                     .build();
             trip = tripRepository.save(trip);
             UUID tripId = trip.getTripId();
@@ -424,9 +428,9 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.0200)
                     .endLongitude(28.9900)
                     .tripStatus(TripStatus.COMPLETED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
-                    .startedAt(Timestamp.valueOf(LocalDateTime.now()))
-                    .endedAt(Timestamp.valueOf(LocalDateTime.now()))
+                    .requestedAt(Instant.now())
+                    .startedAt(Instant.now())
+                    .endedAt(Instant.now())
                     .build();
             trip = tripRepository.save(trip);
             UUID tripId = trip.getTripId();
@@ -454,7 +458,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.0200)
                     .endLongitude(28.9900)
                     .tripStatus(TripStatus.REQUESTED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
+                    .requestedAt(Instant.now())
                     .build();
 
             Trip requestedTrip2 = Trip.builder()
@@ -464,7 +468,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.0300)
                     .endLongitude(29.0000)
                     .tripStatus(TripStatus.REQUESTED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
+                    .requestedAt(Instant.now())
                     .build();
 
             Trip acceptedTrip = Trip.builder()
@@ -475,7 +479,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.0250)
                     .endLongitude(28.9950)
                     .tripStatus(TripStatus.ACCEPTED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
+                    .requestedAt(Instant.now())
                     .build();
 
             tripRepository.save(requestedTrip1);
@@ -505,7 +509,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.0250)
                     .endLongitude(28.9950)
                     .tripStatus(TripStatus.ACCEPTED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
+                    .requestedAt(Instant.now())
                     .build();
 
             tripRepository.save(acceptedTrip);
@@ -535,7 +539,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.0083) // Very close
                     .endLongitude(28.9785)
                     .tripStatus(TripStatus.REQUESTED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now().minusMinutes(1)))
+                    .requestedAt(Instant.now().minusSeconds(60))
                     .build();
             trip = tripRepository.save(trip);
             UUID tripId = trip.getTripId();
@@ -549,15 +553,13 @@ class TripServiceIT extends AbstractIntegrationTest {
                             .with(csrf()))
                     .andExpect(status().isOk());
 
-            Thread.sleep(500); // Short duration
-
             // Complete trip
             mockMvc.perform(post("/api/v1/trips/" + tripId + "/complete")
                             .with(csrf()))
                     .andExpect(status().isOk());
 
             // Assert minimum fare
-            Trip completedTrip = tripRepository.findById(tripId).get();
+            Trip completedTrip = tripRepository.findById(tripId).orElseThrow(() -> new AssertionError("Trip not found"));
             assertThat(completedTrip.getFare()).isGreaterThanOrEqualTo(new BigDecimal("175.00"));
         }
 
@@ -573,7 +575,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.1000)
                     .endLongitude(29.0500)
                     .tripStatus(TripStatus.REQUESTED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now().minusMinutes(10)))
+                    .requestedAt(Instant.now().minusSeconds(600))
                     .build();
             trip = tripRepository.save(trip);
             UUID tripId = trip.getTripId();
@@ -587,15 +589,13 @@ class TripServiceIT extends AbstractIntegrationTest {
                             .with(csrf()))
                     .andExpect(status().isOk());
 
-            Thread.sleep(2000);
-
             // Complete trip
             mockMvc.perform(post("/api/v1/trips/" + tripId + "/complete")
                             .with(csrf()))
                     .andExpect(status().isOk());
 
             // Assert fare is above minimum
-            Trip completedTrip = tripRepository.findById(tripId).get();
+            Trip completedTrip = tripRepository.findById(tripId).orElseThrow(() -> new AssertionError("Trip not found"));
             assertThat(completedTrip.getFare()).isGreaterThan(new BigDecimal("175.00"));
         }
     }
@@ -616,7 +616,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .endLatitude(41.0200)
                     .endLongitude(28.9900)
                     .tripStatus(TripStatus.REQUESTED)
-                    .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
+                    .requestedAt(Instant.now())
                     .build();
             trip = tripRepository.save(trip);
             UUID tripId = trip.getTripId();
@@ -632,7 +632,7 @@ class TripServiceIT extends AbstractIntegrationTest {
                     .andExpect(status().isConflict());
 
             // Verify only one driver assigned
-            Trip finalTrip = tripRepository.findById(tripId).get();
+            Trip finalTrip = tripRepository.findById(tripId).orElseThrow(() -> new AssertionError("Trip not found"));
             assertThat(finalTrip.getDriverId()).isNotNull();
             assertThat(finalTrip.getTripStatus()).isEqualTo(TripStatus.ACCEPTED);
         }

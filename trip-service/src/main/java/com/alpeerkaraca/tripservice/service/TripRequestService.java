@@ -12,8 +12,7 @@ import org.springframework.data.redis.core.GeoOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -58,18 +57,18 @@ public class TripRequestService {
                 circle,
                 args
         );
+        return geoResults == null ? List.of() :
+                geoResults.getContent().stream()
+                        .map(result -> {
+                            String driverIdStr = result.getContent().getName();
+                            UUID driverId = UUID.fromString(driverIdStr);
+                            Point driverPoint = result.getContent().getPoint();
+                            double driverLatitude = driverPoint.getY();
+                            double driverLongitude = driverPoint.getX();
+                            double distanceKm = result.getDistance().getValue();
 
-        return geoResults.getContent().stream()
-                .map(result -> {
-                    String driverIdStr = result.getContent().getName();
-                    UUID driverId = UUID.fromString(driverIdStr);
-                    Point driverPoint = result.getContent().getPoint();
-                    double driverLatitude = driverPoint.getY();
-                    double driverLongitude = driverPoint.getX();
-                    double distanceKm = result.getDistance().getValue();
-
-                    return new NearbyDriversResponse(driverId, driverLatitude, driverLongitude, distanceKm);
-                }).toList();
+                            return new NearbyDriversResponse(driverId, driverLatitude, driverLongitude, distanceKm);
+                        }).toList();
     }
 
     /**
@@ -81,7 +80,7 @@ public class TripRequestService {
      */
     public Trip requestTrip(TripRequest request, UUID passengerId) {
         Trip trips = Trip.builder()
-                .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
+                .requestedAt(Instant.now())
                 .passengerId(passengerId)
                 .startLatitude(request.startLatitude())
                 .startLongitude(request.startLongitude())

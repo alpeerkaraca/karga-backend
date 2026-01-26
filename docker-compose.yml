@@ -28,7 +28,7 @@ services:
       - auth_db_password
       - redis_username
       - redis_password
-      - jwt_secret
+
     environment:
       - SPRING_PROFILES_ACTIVE=docker
     depends_on:
@@ -48,7 +48,7 @@ services:
       - driver_db_password
       - redis_username
       - redis_password
-      - jwt_secret
+
     environment:
       - SPRING_PROFILES_ACTIVE=docker
     depends_on:
@@ -70,7 +70,7 @@ services:
       - redis_password
       - stripe_webhook_secret
       - stripe_api_key
-      - jwt_secret
+
     environment:
       - SPRING_PROFILES_ACTIVE=docker
     depends_on:
@@ -109,7 +109,7 @@ services:
       - user_db_password
       - redis_username
       - redis_password
-      - jwt_secret
+
     environment:
       - SPRING_PROFILES_ACTIVE=docker
     depends_on:
@@ -127,6 +127,8 @@ services:
     restart: always
     secrets:
       - auth_db_password
+    ports:
+      - "5432:5432"
 
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/auth_db_password
@@ -141,6 +143,8 @@ services:
     image: postgres:18-alpine
     container_name: driver-db-karga
     restart: always
+    ports:
+      - "5433:5432"
     secrets:
       - driver_db_password
 
@@ -157,10 +161,11 @@ services:
     image: postgres:18-alpine
     container_name: payment-db-karga
     restart: always
-    secrets:
-      - payment_db_password
     ports:
       - "5435:5432"
+    secrets:
+      - payment_db_password
+    command: [ "postgres", "-c", "wal_level=logical" ]
 
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/payment_db_password
@@ -175,9 +180,11 @@ services:
     image: postgres:18-alpine
     container_name: trip-db-karga
     restart: always
+    ports:
+      - "5434:5432"
     secrets:
       - trip_db_password
-
+    command: [ "postgres", "-c", "wal_level=logical" ]
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/trip_db_password
       POSTGRES_USER: karga
@@ -191,6 +198,8 @@ services:
     image: postgres:18-alpine
     container_name: user-db-karga
     restart: always
+    ports:
+      - "5436:5432"
     secrets:
       - user_db_password
 
@@ -233,12 +242,24 @@ services:
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      # 1. Dışarıdaki servisler (auth, driver) buraya 'kafka' ismiyle ulaşsın:
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://karga-kafka:9092
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
 
-      # 2. KRİTİK DÜZELTME: Kendi kendine (Controller'a) 'localhost' üzerinden ulaşsın:
+      # DEFINING LISTENERS
+      # 1. CONTROLLER: Internal metadata management (9093)
+      # 2. PLAINTEXT: Internal Docker network communication (29092)
+      # 3. EXTERNAL: Connection from your Host Machine/IDE (9092)
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9092
+
+      # ADVERTISING ADDRESSES
+      # Clients inside Docker see "karga-kafka:29092"
+      # Clients outside Docker see "localhost:9092"
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://karga-kafka:29092,EXTERNAL://localhost:9092
+
+      # MAPPING PROTOCOLS
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
 
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -251,13 +272,33 @@ services:
     networks:
       - karga-network
     volumes:
-      - kafka-data:/var/lib/kafka/data
+      - karga-kafka-data:/var/lib/kafka/data
     healthcheck:
-      # Sağlık kontrolünü de localhost üzerinden yapıyoruz
       test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list" ]
       interval: 10s
       timeout: 5s
       retries: 5
+  # ----- DEBEZIUM START -----
+  karga-connect:
+    image: debezium/connect:3.0.0.Final
+    container_name: karga-debezium
+    ports:
+      - "8083:8083"
+    environment:
+      - BOOTSTRAP_SERVERS=karga-kafka:29092
+      - GROUP_ID=1
+      - CONFIG_STORAGE_TOPIC=my_connect_configs
+      - OFFSET_STORAGE_TOPIC=my_connect_offsets
+      - STATUS_STORAGE_TOPIC=my_connect_statuses
+      - KEY_CONVERTER_SCHEMAS_ENABLE=false
+      - VALUE_CONVERTER_SCHEMAS_ENABLE=false
+    depends_on:
+      - karga-kafka
+      - trip-db
+      - payment-db
+    networks:
+      - karga-network
+
 
 secrets:
   auth_db_password:
@@ -278,8 +319,6 @@ secrets:
     file: ./secrets/stripe_api_key
   stripe_webhook_secret:
     file: ./secrets/stripe_webhook_secret
-  jwt_secret:
-    file: ./secrets/jwt_secret
 
 networks:
   karga-network:
@@ -291,6 +330,6 @@ volumes:
   payment-postgres-data:
   trip-postgres-data:
   user-postgres-data:
-  kafka-data:
+  karga-kafka-data:
 
 

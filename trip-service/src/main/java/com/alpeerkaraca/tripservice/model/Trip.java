@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.UUID;
 
 @Setter
@@ -24,9 +24,9 @@ public class Trip {
     private double endLatitude;
     private double endLongitude;
     private String endAddress;
-    private Timestamp requestedAt;
-    private Timestamp startedAt;
-    private Timestamp endedAt;
+    private Instant requestedAt;
+    private Instant startedAt;
+    private Instant endedAt;
     @Enumerated(EnumType.STRING)
     private TripStatus tripStatus;
     private BigDecimal fare;

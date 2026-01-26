@@ -12,7 +12,6 @@ import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -63,7 +62,6 @@ public class TripsController {
         return ApiResponse.success(trips, "Available trips listed.");
     }
 
-    @PreAuthorize("hasRole('DRIVER')")
     @PostMapping("/{tripId}/accept")
     public ResponseEntity<ApiResponse<Trip>> acceptTrip(@PathVariable UUID tripId) {
         String driverIdStr = SecurityContextHolder.getContext().getAuthentication().getName();

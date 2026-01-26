@@ -130,7 +130,7 @@ class AuthServiceTest {
 
     @Test
     @DisplayName("Should login user successfully with valid credentials")
-    void login_ValidCredentials_Success() throws Exception {
+    void login_ValidCredentials_Success() {
         // Arrange
         Authentication authentication = new UsernamePasswordAuthenticationToken(
                 loginRequest.getEmail(),
@@ -193,7 +193,7 @@ class AuthServiceTest {
 
     @Test
     @DisplayName("Should refresh token successfully with valid refresh token")
-    void refreshToken_ValidToken_Success() throws Exception {
+    void refreshToken_ValidToken_Success() {
         // Arrange
         RefreshTokenRequest refreshTokenRequest = new RefreshTokenRequest("validRefreshToken");
         UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
@@ -264,28 +264,5 @@ class AuthServiceTest {
         verify(userDetailsService, never()).loadUserByUsername(anyString());
     }
 
-    @Test
-    @DisplayName("Should publish user created event with correct data")
-    void publishUserCreatedEvent_ValidData_Success() {
-        // Arrange
-        UUID userId = UUID.randomUUID();
-        String email = "test@example.com";
-        String firstName = "John";
-        String lastName = "Doe";
-        String phoneNumber = "+1234567890";
-
-        // Act
-        authService.publishUserCreatedEvent(userId, email, firstName, lastName, phoneNumber);
-
-        // Assert
-        verify(kafkaTemplate).send(eq("user_created"), argThat(message ->
-                message.getId().equals(userId.toString()) &&
-                        message.getEmail().equals(email) &&
-                        message.getFirstName().equals(firstName) &&
-                        message.getLastName().equals(lastName) &&
-                        message.getPhoneNumber().equals(phoneNumber) &&
-                        message.getRating() == 0.0
-        ));
-    }
 }
 

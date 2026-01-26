@@ -1,11 +1,15 @@
 package com.alpeerkaraca.tripservice.controller;
 
+import com.alpeerkaraca.common.event.PaymentMessage;
 import com.alpeerkaraca.common.exception.ConflictException;
 import com.alpeerkaraca.common.exception.ResourceNotFoundException;
+import com.alpeerkaraca.common.security.JWTService;
 import com.alpeerkaraca.tripservice.dto.NearbyDriversResponse;
 import com.alpeerkaraca.tripservice.dto.TripRequest;
 import com.alpeerkaraca.tripservice.model.Trip;
 import com.alpeerkaraca.tripservice.model.TripStatus;
+import com.alpeerkaraca.tripservice.repository.TripInboxRepository;
+import com.alpeerkaraca.tripservice.repository.TripRepository;
 import com.alpeerkaraca.tripservice.service.TripManagementService;
 import com.alpeerkaraca.tripservice.service.TripRequestService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,18 +17,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.MediaType;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -42,14 +44,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(TripsController.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class TripsControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
 
     @MockitoBean
     private TripRequestService tripRequestService;
@@ -58,7 +56,20 @@ class TripsControllerTest {
     private TripManagementService tripManagementService;
 
     @MockitoBean
+    private KafkaTemplate<String, PaymentMessage> kafkaTemplate;
+    @MockitoBean
+    private TripRepository tripsRepository;
+    @MockitoBean
+    private TripInboxRepository tripInboxRepository;
+
+    @MockitoBean
     private RedisTemplate<String, String> redisTemplate;
+
+    @MockitoBean
+    private JWTService jwtService;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private UUID testTripId;
     private Trip testTrip;
@@ -76,7 +87,7 @@ class TripsControllerTest {
                 .endLatitude(41.0200)
                 .endLongitude(28.9900)
                 .tripStatus(TripStatus.REQUESTED)
-                .requestedAt(Timestamp.valueOf(LocalDateTime.now()))
+                .requestedAt(Instant.now())
                 .build();
     }
 
@@ -108,7 +119,7 @@ class TripsControllerTest {
                     .andDo(print())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.message").value("Yakındaki sürücüler listelendi."))
+                    .andExpect(jsonPath("$.message").value("Nearby drivers listed."))
                     .andExpect(jsonPath("$.data", hasSize(2)))
                     .andExpect(jsonPath("$.data[0].distanceKm").value(1.5))
                     .andExpect(jsonPath("$.data[1].distanceKm").value(2.3));
@@ -224,7 +235,7 @@ class TripsControllerTest {
                     .andDo(print())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.message").value("Yolculuk talebiniz alındı."))
+                    .andExpect(jsonPath("$.message").value("Trip request received."))
                     .andExpect(jsonPath("$.data.tripId").value(testTripId.toString()))
                     .andExpect(jsonPath("$.data.tripStatus").value("REQUESTED"))
                     .andExpect(jsonPath("$.data.startLatitude").value(41.0082))
@@ -381,7 +392,7 @@ class TripsControllerTest {
                     .andDo(print())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.message").value("Mevcut yolculuklar listelendi."))
+                    .andExpect(jsonPath("$.message").value("Available trips listed."))
                     .andExpect(jsonPath("$.data", hasSize(2)))
                     .andExpect(jsonPath("$.data[0].tripStatus").value("REQUESTED"))
                     .andExpect(jsonPath("$.data[1].tripStatus").value("REQUESTED"));
@@ -503,7 +514,7 @@ class TripsControllerTest {
                     .andDo(print())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.message").value("Yolculuk başlatıldı."))
+                    .andExpect(jsonPath("$.message").value("Trip started."))
                     .andExpect(jsonPath("$.data").doesNotExist());
 
             verify(tripManagementService).startTrip(testTripId);
@@ -560,7 +571,7 @@ class TripsControllerTest {
                     .andDo(print())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.message").value("Yolculuk tamamlandı."))
+                    .andExpect(jsonPath("$.message").value("Trip completed."))
                     .andExpect(jsonPath("$.data").doesNotExist());
 
             verify(tripManagementService).completeTrip(testTripId);
@@ -616,7 +627,7 @@ class TripsControllerTest {
                     .andDo(print())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.message").value("Yolculuk iptal edildi."))
+                    .andExpect(jsonPath("$.message").value("Trip cancelled."))
                     .andExpect(jsonPath("$.data").doesNotExist());
 
             verify(tripManagementService).cancelTrip(testTripId);

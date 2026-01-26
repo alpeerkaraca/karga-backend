@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: karga-redis
+  namespace: data-prod
+spec:
+  ports:
+    - port: 6379
+      name: client
+  selector:
+    app: karga-redis
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: karga-redis
+spec:
+  serviceName: karga-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: karga-redis
+  template:
+    metadata:
+      labels:
+        app: karga-redis
+    spec:
+      containers:
+        - name: karga-redis
+          image: docker.io/redis:7-alpine
+          command: [ "/bin/sh", "-c" ]
+          args:
+            - |
+              mkdir -p /usr/local/etc/redis &&
+              echo "user $(cat /etc/secrets/redis_username) on >$(cat /etc/secrets/redis_password) ~* +@all" > /usr/local/etc/redis/users.acl &&
+              redis-server --aclfile /usr/local/etc/redis/users.acl --appendonly yes
+          ports:
+            - containerPort: 6379
+              name: client
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: secret-volume
+              mountPath: /etc/secrets
+              readOnly: true
+      volumes:
+        - name: secret-volume
+          secret:
+            secretName: karga-secrets
+
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi

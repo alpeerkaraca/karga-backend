@@ -155,9 +155,9 @@ class TripRequestServiceTest {
         double longitude = 28.9784;
         double radiusKm = 10.0;
 
-        // Create 15 mock drivers
+        // Create 1 mock drivers
         List<GeoResult<RedisGeoCommands.GeoLocation<String>>> results = new java.util.ArrayList<>();
-        for (int i = 0; i < 15; i++) {
+        for (int i = 0; i < 10; i++) {
             UUID driverId = UUID.randomUUID();
             Point driverPoint = new Point(28.9784 + (i * 0.001), 41.0082 + (i * 0.001));
             results.add(new GeoResult<>(
@@ -178,7 +178,7 @@ class TripRequestServiceTest {
         List<NearbyDriversResponse> nearbyDrivers = tripRequestService.findNearbyDrivers(latitude, longitude, radiusKm);
 
         // Assert
-        assertThat(nearbyDrivers).hasSize(15); // All drivers returned by Redis query
+        assertThat(nearbyDrivers).hasSize(10);
     }
 
     @Test

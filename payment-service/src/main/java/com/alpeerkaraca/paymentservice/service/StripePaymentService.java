@@ -1,9 +1,16 @@
 package com.alpeerkaraca.paymentservice.service;
 
+import com.alpeerkaraca.common.event.PaymentMessage;
 import com.alpeerkaraca.common.exception.ResourceNotFoundException;
+import com.alpeerkaraca.common.exception.SerializationException;
+import com.alpeerkaraca.common.model.TripEventTypes;
 import com.alpeerkaraca.paymentservice.model.Payment;
+import com.alpeerkaraca.paymentservice.model.PaymentOutbox;
 import com.alpeerkaraca.paymentservice.model.PaymentStatus;
+import com.alpeerkaraca.paymentservice.repository.PaymentOutboxRepository;
 import com.alpeerkaraca.paymentservice.repository.PaymentRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stripe.Stripe;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
@@ -20,6 +27,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -36,6 +44,8 @@ import java.util.UUID;
 public class StripePaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final ObjectMapper objectMapper;
+    private final PaymentOutboxRepository paymentOutboxRepository;
 
     @Value("${stripe.apiKey}")
     private String stripeApiKey;
@@ -145,7 +155,7 @@ public class StripePaymentService {
                 log.info("Payment succeeded: {}", intent.getId());
                 log.info("Payment event: {}\n-----------------------------------------------------------------------------------", event.toJson());
 
-                this.approvePayment(intent);
+                approvePayment(intent);
                 break;
 
             case "payment_intent.payment_failed":
@@ -166,21 +176,53 @@ public class StripePaymentService {
         }
     }
 
-    private void approvePayment(PaymentIntent intent) {
+    @Transactional
+    protected void approvePayment(PaymentIntent intent) {
         Payment payment = paymentRepository.findById(UUID.fromString(intent.getMetadata().get("payment_id")))
                 .orElseThrow(() -> new ResourceNotFoundException("Payment could not found." + intent.toJson()));
         payment.setPaymentStatus(PaymentStatus.COMPLETED);
         payment.setPaidAt(Timestamp.valueOf(LocalDateTime.now()));
-        // TODO: Send a notification or email to user.
         paymentRepository.save(payment);
+
+        saveToOutbox(payment, TripEventTypes.PAYMENT_SUCCESSFUL, null);
     }
 
-    private void failedPayment(PaymentIntent intent) {
+    @Transactional
+    protected void failedPayment(PaymentIntent intent) {
         Payment payment = paymentRepository.findByStripeSessionId(intent.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Payment could not found." + intent.toJson()));
         payment.setPaymentStatus(PaymentStatus.FAILED);
 
         // Send a notification or email to user.
         paymentRepository.save(payment);
+
+        String failureReason = intent.getLastPaymentError() != null ?
+                intent.getLastPaymentError().getMessage() : "Unknown reason";
+        saveToOutbox(payment, TripEventTypes.PAYMENT_FAILED, failureReason);
+    }
+
+    private void saveToOutbox(Payment payment, TripEventTypes eventType, String failureReason) {
+        try {
+            PaymentMessage message = PaymentMessage.builder()
+                    .paymentId(payment.getPaymentId().toString())
+                    .tripId(payment.getTripId())
+                    .passengerId(payment.getPassengerId())
+                    .amount(payment.getPaymentAmount())
+                    .eventType(eventType)
+                    .failureReason(failureReason)
+                    .createdAt(Instant.now())
+                    .build();
+            PaymentOutbox outbox = new PaymentOutbox();
+            outbox.setAggregateType("PAYMENT");
+            outbox.setAggregateId(payment.getPaymentId().toString());
+            outbox.setEventType(eventType.toString());
+            outbox.setPayload(objectMapper.writeValueAsString(message));
+
+            paymentOutboxRepository.save(outbox);
+        } catch (JsonProcessingException e) {
+            log.error("Outbox serialization error", e);
+            throw new SerializationException("Error saving payment event");
+        }
+
     }
 }

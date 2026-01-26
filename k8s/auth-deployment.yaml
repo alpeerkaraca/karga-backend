@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: app-prod
+  labels:
+    app: auth-service
+spec:
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          image: localhost/karga/auth-service:v1
+          imagePullPolicy: Never
+
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "k8s"
+          volumeMounts:
+            - name: secret-volume
+              mountPath: "/etc/secrets"
+              readOnly: true
+            - name: certs-volume
+              mountPath: "/etc/certs"
+              readOnly: true
+      volumes:
+        - name: secret-volume
+          secret:
+            secretName: karga-secrets
+        - name: certs-volume
+          secret:
+            secretName: auth-jwt-keys
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+spec:
+  selector:
+    app: auth-service
+  ports:
+    - port: 8084
+      targetPort: 8084
+

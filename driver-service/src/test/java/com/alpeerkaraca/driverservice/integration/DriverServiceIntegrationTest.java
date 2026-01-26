@@ -1,21 +1,24 @@
 package com.alpeerkaraca.driverservice.integration;
 
+import com.alpeerkaraca.common.event.TripMessage;
+import com.alpeerkaraca.common.model.TripEventTypes;
 import com.alpeerkaraca.driverservice.AbstractIntegrationTest;
 import com.alpeerkaraca.driverservice.dto.DriverLocationMessage;
 import com.alpeerkaraca.driverservice.dto.DriverUpdateStatus;
-import com.alpeerkaraca.driverservice.dto.TripMessage;
 import com.alpeerkaraca.driverservice.model.Driver;
 import com.alpeerkaraca.driverservice.model.DriverStatus;
 import com.alpeerkaraca.driverservice.model.Vehicle;
 import com.alpeerkaraca.driverservice.repository.DriverRepository;
 import com.alpeerkaraca.driverservice.repository.VehicleRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -25,7 +28,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -39,6 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Testcontainers
+@Import(KafkaTestTopicsConfig.class)
 @DisplayName("Driver Service Integration Tests")
 class DriverServiceIntegrationTest extends AbstractIntegrationTest {
 
@@ -55,8 +61,10 @@ class DriverServiceIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private KafkaTemplate<String, DriverLocationMessage> locationKafkaTemplate;
     @Autowired
-    private KafkaTemplate<String, TripMessage> tripKafkaTemplate;
+    private KafkaTemplate<String, String> kafkaTemplate;
+
     private UUID testDriverId;
+
 
 
     @BeforeEach
@@ -86,6 +94,16 @@ class DriverServiceIntegrationTest extends AbstractIntegrationTest {
                 .isActive(true)
                 .build();
         driverRepository.save(testDriver);
+    }
+
+    private ProducerRecord<String, String> tripRecord(TripEventTypes eventType, TripMessage message) throws Exception {
+        String innerJson = objectMapper.writeValueAsString(message);
+        String outerJson = objectMapper.writeValueAsString(Map.of("payload", innerJson));
+
+        ProducerRecord<String, String> producerRecord = new ProducerRecord<>("trip_events", outerJson);
+        producerRecord.headers().add("eventType", eventType.name().getBytes());
+        producerRecord.headers().add("id", UUID.randomUUID().toString().getBytes());
+        return producerRecord;
     }
 
     @Test
@@ -157,23 +175,22 @@ class DriverServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     @DisplayName("Should handle trip accepted event and set driver to BUSY")
-    void handleTripAccepted_SetsDriverToBusy() {
+    void handleTripAccepted_SetsDriverToBusy() throws Exception {
         // Arrange - First set driver ONLINE
         redisTemplate.opsForValue().set("driver:status:" + testDriverId, DriverStatus.ONLINE.name());
 
         TripMessage message = new TripMessage(
-                "TRIP_ACCEPTED",
+                TripEventTypes.TRIP_ACCEPTED,
                 UUID.randomUUID(),
                 testDriverId,
-                Timestamp.valueOf(LocalDateTime.now()),
+                Instant.now(),
                 BigDecimal.ZERO,
                 UUID.randomUUID(),
                 0.56,
                 1.23
         );
-
         // Act
-        tripKafkaTemplate.send("trip_events", message);
+        kafkaTemplate.send(tripRecord(TripEventTypes.TRIP_ACCEPTED, message));
 
         // Assert - Wait for async processing
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -184,15 +201,15 @@ class DriverServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     @DisplayName("Should handle trip completed event and set driver to ONLINE")
-    void handleTripCompleted_SetsDriverToOnline() {
+    void handleTripCompleted_SetsDriverToOnline() throws Exception {
         // Arrange - First set driver BUSY
         redisTemplate.opsForValue().set("driver:status:" + testDriverId, DriverStatus.BUSY.name());
 
         TripMessage message = new TripMessage(
-                "TRIP_COMPLETED",
+                TripEventTypes.TRIP_COMPLETED,
                 UUID.randomUUID(),
                 testDriverId,
-                Timestamp.valueOf(LocalDateTime.now()),
+                Instant.now(),
                 new BigDecimal("25.50"),
                 UUID.randomUUID(),
                 1,
@@ -200,7 +217,7 @@ class DriverServiceIntegrationTest extends AbstractIntegrationTest {
         );
 
         // Act
-        tripKafkaTemplate.send("trip_events", message);
+        kafkaTemplate.send(tripRecord(TripEventTypes.TRIP_COMPLETED, message));
 
         // Assert - Wait for async processing
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
