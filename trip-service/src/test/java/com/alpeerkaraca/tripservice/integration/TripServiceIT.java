@@ -252,9 +252,8 @@ class TripServiceIT extends AbstractIntegrationTest {
             Awaitility.await()
                     .atMost(5, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-                        List<TripOutbox> outboxList = tripOutboxRepository.findAll();
-                        assertThat(outboxList).isNotEmpty();
-                        TripOutbox latestEvent = outboxList.getLast();
+                        TripOutbox latestEvent = tripOutboxRepository.findFirstByOrderByCreatedAtDesc()
+                                .orElseThrow(() -> new AssertionError("No outbox event found"));
                         String payload = latestEvent.getPayload();
                         assertThat(payload.contains(TripEventTypes.TRIP_ACCEPTED.toString()));
                         assertThat(payload.contains(tripId.toString()));
@@ -274,9 +273,8 @@ class TripServiceIT extends AbstractIntegrationTest {
             });
 
             Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
-                List<TripOutbox> outboxList = tripOutboxRepository.findAll();
-                assertThat(outboxList).isNotEmpty();
-                TripOutbox latestEvent = outboxList.getLast();
+                TripOutbox latestEvent = tripOutboxRepository.findFirstByOrderByCreatedAtDesc()
+                        .orElseThrow(() -> new AssertionError("No outbox event found"));
                 String payload = latestEvent.getPayload();
                 assertThat(payload.contains(TripEventTypes.TRIP_STARTED.toString()));
                 assertThat(payload.contains(tripId.toString()));
@@ -295,9 +293,8 @@ class TripServiceIT extends AbstractIntegrationTest {
             });
 
             Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
-                List<TripOutbox> outboxList = tripOutboxRepository.findAll();
-                assertThat(outboxList).isNotEmpty();
-                TripOutbox latestEvent = outboxList.getLast();
+                TripOutbox latestEvent = tripOutboxRepository.findFirstByOrderByCreatedAtDesc()
+                        .orElseThrow(() -> new AssertionError("No outbox event found"));
                 String payload = latestEvent.getPayload();
                 assertThat(payload.contains(TripEventTypes.TRIP_COMPLETED.toString()));
                 assertThat(payload.contains(tripId.toString()));
@@ -331,9 +328,8 @@ class TripServiceIT extends AbstractIntegrationTest {
             assertThat(cancelledTrip.getTripStatus()).isEqualTo(TripStatus.CANCELLED);
 
             Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
-                List<TripOutbox> outboxList = tripOutboxRepository.findAll();
-                assertThat(outboxList).isNotEmpty();
-                TripOutbox latestEvent = outboxList.getLast();
+                TripOutbox latestEvent = tripOutboxRepository.findFirstByOrderByCreatedAtDesc()
+                        .orElseThrow(() -> new AssertionError("No outbox event found"));
                 String payload = latestEvent.getPayload();
                 assertThat(payload.contains(TripEventTypes.TRIP_CANCELLED.toString()));
                 assertThat(payload.contains(tripId.toString()));
