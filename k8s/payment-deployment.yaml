@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: app-prod
+  labels:
+    app: payment-service
+spec:
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+        - name: payment-service
+          image: localhost/karga/payment-service:v1
+          imagePullPolicy: Never
+
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "k8s"
+
+          volumeMounts:
+            - name: secret-volume
+              mountPath: "/etc/secrets"
+              readOnly: true
+            - name: certs-volume
+              mountPath: "/etc/certs"
+              readOnly: true
+      volumes:
+        - name: secret-volume
+          secret:
+            secretName: karga-secrets
+        - name: certs-volume
+          secret:
+            secretName: auth-jwt-keys
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+  namespace: app-prod
+spec:
+  selector:
+    app: payment-service
+  ports:
+    - port: 8086
+      targetPort: 8086

@@ -174,6 +174,21 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
+    @ExceptionHandler(SerializationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleSerializationException(SerializationException ex) {
+        log.error("Serialization Error: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(UserRegistrationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleUserRegistrationException(UserRegistrationException ex) {
+        log.error("User Registration Error: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleException(Exception ex) {

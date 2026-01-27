@@ -4,7 +4,9 @@ import com.alpeerkaraca.common.exception.ConflictException;
 import com.alpeerkaraca.common.exception.ResourceNotFoundException;
 import com.alpeerkaraca.tripservice.model.Trip;
 import com.alpeerkaraca.tripservice.model.TripStatus;
+import com.alpeerkaraca.tripservice.repository.TripOutboxRepository;
 import com.alpeerkaraca.tripservice.repository.TripRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -17,7 +19,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,6 +34,12 @@ class TripManagementServiceTest {
     @Mock
     private KafkaTemplate<String, String> kafkaTemplate;
 
+    @Mock
+    private ObjectMapper objectMapper;
+
+    @Mock
+    private TripOutboxRepository tripOutboxRepository;
+
     @Test
     void acceptTrip_ValidTrip_ShouldAcceptAndPublishEvent() {
         UUID tripId = UUID.randomUUID();
@@ -45,7 +52,6 @@ class TripManagementServiceTest {
         tripManagementService.acceptTrip(tripId, driverId);
 
         verify(tripRepository).save(any(Trip.class));
-        verify(kafkaTemplate).send(anyString(), any());
     }
 
     @Test

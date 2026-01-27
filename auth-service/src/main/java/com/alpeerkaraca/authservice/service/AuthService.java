@@ -3,19 +3,19 @@ package com.alpeerkaraca.authservice.service;
 import com.alpeerkaraca.authservice.dto.UserLoginRequest;
 import com.alpeerkaraca.authservice.dto.UserRegisterMessage;
 import com.alpeerkaraca.authservice.dto.UserRegisterRequest;
+import com.alpeerkaraca.authservice.model.AuthOutbox;
 import com.alpeerkaraca.authservice.model.Role;
 import com.alpeerkaraca.authservice.model.User;
+import com.alpeerkaraca.authservice.repository.AuthOutboxRepository;
 import com.alpeerkaraca.authservice.repository.UserRepository;
 import com.alpeerkaraca.common.dto.RefreshTokenRequest;
 import com.alpeerkaraca.common.dto.TokenPair;
-import com.alpeerkaraca.common.exception.ConflictException;
-import com.alpeerkaraca.common.exception.InvalidCredentialsException;
-import com.alpeerkaraca.common.exception.InvalidTokenException;
+import com.alpeerkaraca.common.exception.*;
 import com.alpeerkaraca.common.security.JWTService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -25,8 +25,6 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.UUID;
 
@@ -41,13 +39,13 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
-    private static final String USER_CREATED_TOPIC = "user_created";
     private final UserRepository userRepository;
     private final JWTService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final UserDetailsService userDetailsService;
     private final AuthenticationManager authenticationManager;
-    private final KafkaTemplate<String, UserRegisterMessage> kafkaTemplate;
+    private final AuthOutboxRepository authOutboxRepository;
+    private final ObjectMapper objectMapper;
 
     /**
      * Registers a new user and publishes the 'user_created' Kafka event.
@@ -65,30 +63,55 @@ public class AuthService {
         userRepository.findByEmail(request.getEmail()).ifPresent(user -> {
             throw new ConflictException("Email already in use");
         });
-        String encodedPassword = passwordEncoder.encode(request.getPassword());
-        User user = User.builder()
-                .email(request.getEmail().toLowerCase())
-                .password(encodedPassword)
-                .role(Role.PASSENGER)
-                .isActive(false)
-                .build();
-        final User savedUser = userRepository.save(user);
+        try {
+            String encodedPassword = passwordEncoder.encode(request.getPassword());
+            User user = User.builder()
+                    .email(request.getEmail().toLowerCase())
+                    .password(encodedPassword)
+                    .role(Role.PASSENGER)
+                    .isActive(false)
+                    .build();
+            final User savedUser = userRepository.save(user);
 
+            UserRegisterMessage userRegisterMessage = UserRegisterMessage.builder()
+                    .id(savedUser.getUserId().toString())
+                    .email(savedUser.getEmail())
+                    .firstName(request.getFirstName())
+                    .lastName(request.getLastName())
+                    .phoneNumber(request.getPhoneNumber())
+                    .rating(0.0)
+                    .build();
 
-        // Publish Kafka event asynchronously
-        TransactionSynchronizationManager.registerSynchronization(
-                new TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        publishUserCreatedEvent(
-                                savedUser.getUserId(), savedUser.getEmail(),
-                                request.getFirstName(), request.getLastName(),
-                                request.getPhoneNumber()
-                        );
-                    }
-                }
-        );
-        return savedUser;
+            final AuthOutbox outboxEvent = new AuthOutbox();
+            outboxEvent.setAggregateId(savedUser.getUserId().toString());
+            outboxEvent.setEventType("UserCreated");
+            outboxEvent.setPayload(objectMapper.writeValueAsString(userRegisterMessage));
+            authOutboxRepository.save(outboxEvent);
+
+            log.info("Saga Initiated: User {} created (inactive). Outbox event saved.", savedUser.getUserId());
+            return savedUser;
+        } catch (Exception e) {
+            log.error("Error during user registration: {}", e.getMessage());
+            throw new UserRegistrationException("An error occurred during user registration. Please try again later.");
+        }
+    }
+
+    @Transactional
+    public void activateUser(UUID userId) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        user.setActive(true);
+        userRepository.save(user);
+        log.info("User {} activated successfully.", userId);
+    }
+
+    @Transactional
+    public void rollbackUser(UUID userId) {
+        if (userRepository.existsById(userId)) {
+            userRepository.deleteById(userId);
+            log.info("User {} rolled back (deleted) successfully.", userId);
+        } else {
+            log.warn("Rollback attempted for non-existing user {}", userId);
+        }
     }
 
     /**
@@ -101,6 +124,10 @@ public class AuthService {
     public TokenPair login(@Valid UserLoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new InvalidCredentialsException("Email or password is incorrect"));
+
+        if (!user.isActive()) {
+            throw new InvalidCredentialsException("Account is not active. Please complete registration.");
+        }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new InvalidCredentialsException("Email or password is incorrect");
@@ -152,28 +179,4 @@ public class AuthService {
         return jwtService.generateTokenPair(authentication, user.getUserId());
     }
 
-    /**
-     * Publishes a message to the Kafka topic upon successful user registration.
-     *
-     * @param userId      The user's UUID.
-     * @param email       User's email address.
-     * @param firstName   First name.
-     * @param lastName    Last name.
-     * @param phoneNumber Phone number.
-     */
-    public void publishUserCreatedEvent(
-            UUID userId, String email,
-            String firstName, String lastName,
-            String phoneNumber
-    ) {
-        UserRegisterMessage userRegisterMessage = UserRegisterMessage.builder()
-                .id(userId.toString())
-                .email(email)
-                .firstName(firstName)
-                .lastName(lastName)
-                .phoneNumber(phoneNumber)
-                .rating(0.0) // Default rating for new user
-                .build();
-        kafkaTemplate.send(USER_CREATED_TOPIC, userRegisterMessage);
-    }
 }

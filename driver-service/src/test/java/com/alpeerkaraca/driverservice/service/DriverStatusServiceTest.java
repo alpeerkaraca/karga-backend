@@ -99,8 +99,8 @@ class DriverStatusServiceTest {
     @DisplayName("Should handle ONLINE status with valid coordinates")
     void updateDriverStatus_ValidCoordinates_Success() {
         // Arrange
-        Double latitude = 40.7128;
-        Double longitude = -74.0060;
+        double latitude = 40.7128;
+        double longitude = -74.0060;
 
         // Act
         driverStatusService.updateDriverStatus(testDriverId, DriverStatus.ONLINE, longitude, latitude);

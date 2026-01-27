@@ -34,8 +34,6 @@ public abstract class AbstractIntegrationTest {
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.kafka.consumer.properties.spring.json.type.mapping",
-                () -> "com.alpeerkaraca.paymentservice.dto.TripMessage:com.alpeerkaraca.driverservice.dto.TripMessage");
         registry.add("spring.kafka.consumer.value-deserializer",
                 () -> "org.springframework.kafka.support.serializer.ErrorHandlingDeserializer");
         registry.add("spring.kafka.consumer.properties.spring.deserializer.value.delegate.class",

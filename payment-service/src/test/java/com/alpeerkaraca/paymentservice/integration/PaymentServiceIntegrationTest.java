@@ -1,7 +1,8 @@
 package com.alpeerkaraca.paymentservice.integration;
 
+import com.alpeerkaraca.common.event.TripMessage;
+import com.alpeerkaraca.common.model.TripEventTypes;
 import com.alpeerkaraca.paymentservice.AbstractIntegrationTest;
-import com.alpeerkaraca.paymentservice.dto.TripMessage;
 import com.alpeerkaraca.paymentservice.model.Payment;
 import com.alpeerkaraca.paymentservice.model.PaymentStatus;
 import com.alpeerkaraca.paymentservice.repository.PaymentRepository;
@@ -18,6 +19,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -74,12 +76,12 @@ class PaymentServiceIntegrationTest extends AbstractIntegrationTest {
                 });
 
         TripMessage message = TripMessage.builder()
-                .eventType("TRIP_COMPLETED")
+                .eventType(TripEventTypes.TRIP_COMPLETED)
                 .tripId(tripId)
                 .passengerId(passengerId)
                 .driverId(UUID.randomUUID())
                 .fare(fare)
-                .timestamp(Timestamp.valueOf(LocalDateTime.now()))
+                .createdAt(Instant.now())
                 .build();
 
         // Act
