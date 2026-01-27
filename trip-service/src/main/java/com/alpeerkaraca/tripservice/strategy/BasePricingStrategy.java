@@ -4,8 +4,7 @@ import com.alpeerkaraca.tripservice.model.Trip;
 import com.alpeerkaraca.tripservice.model.TripStatus;
 
 import java.math.BigDecimal;
-import java.time.temporal.ChronoField;
-import java.util.concurrent.TimeUnit;
+import java.time.Duration;
 
 public abstract class BasePricingStrategy implements PricingStrategy {
 
@@ -27,8 +26,7 @@ public abstract class BasePricingStrategy implements PricingStrategy {
             return BigDecimal.ZERO;
         }
 
-        long timeDifference = trip.getEndedAt().getLong(ChronoField.INSTANT_SECONDS) - trip.getStartedAt().getLong(ChronoField.INSTANT_SECONDS);
-        long elapsedMinutes = TimeUnit.MILLISECONDS.toMinutes(timeDifference);
+        long elapsedMinutes = Duration.between(trip.getStartedAt(), trip.getEndedAt()).toMinutes();
 
         double distanceInKm = calculateHaversineDistance(
                 trip.getStartLatitude(),
