@@ -80,3 +80,7 @@ k8s/karga-secret.yaml
 # --- Secret Files ---
 secrets/
 **/secrets/**
+.env.docker
+.env.local
+.env
+.env.production

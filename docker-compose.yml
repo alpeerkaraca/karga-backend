@@ -17,24 +17,32 @@ services:
       - user-service
     networks:
       - karga-network
+
   # ----- Microservices Start -----
   auth-service:
     build:
       context: .
       dockerfile: auth-service/Dockerfile
-    #    ports:
-    #      - "8084:8084"
     secrets:
       - auth_db_password
       - redis_username
       - redis_password
-
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - VAULT_HOST=${VAULT_HOST}
+      - VAULT_PORT=8200
+      - VAULT_SCHEME=https
+      - VAULT_ROLE_ID=${AUTH_VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${AUTH_VAULT_SECRET_ID}
+      - VAULT_TRUSTSTORE_PASSWORD=${VAULT_TRUSTSTORE_PASSWORD}
+      - VAULT_SSL_TRUST_STORE_PASSWORD=${VAULT_TRUSTSTORE_PASSWORD}
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=karga-kafka:29092
     depends_on:
       - auth-db
       - karga-redis
       - karga-kafka
+    extra_hosts:
+      - "vault-server:host-gateway"
     networks:
       - karga-network
 
@@ -42,19 +50,26 @@ services:
     build:
       context: .
       dockerfile: driver-service/Dockerfile
-    #    ports:
-    #      - "8085:8085"
     secrets:
       - driver_db_password
       - redis_username
       - redis_password
-
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - VAULT_HOST=${VAULT_HOST}
+      - VAULT_PORT=8200
+      - VAULT_SCHEME=https
+      - VAULT_ROLE_ID=${DRIVER_VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${DRIVER_VAULT_SECRET_ID}
+      - VAULT_TRUSTSTORE_PASSWORD=${VAULT_TRUSTSTORE_PASSWORD}
+      - VAULT_SSL_TRUST_STORE_PASSWORD=${VAULT_TRUSTSTORE_PASSWORD}
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=karga-kafka:29092
     depends_on:
       - driver-db
       - karga-redis
       - karga-kafka
+    extra_hosts:
+      - "vault-server:host-gateway"
     networks:
       - karga-network
 
@@ -62,21 +77,28 @@ services:
     build:
       context: .
       dockerfile: payment-service/Dockerfile
-    #    ports:
-    #      - "8086:8086"
     secrets:
       - payment_db_password
       - redis_username
       - redis_password
       - stripe_webhook_secret
       - stripe_api_key
-
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - VAULT_HOST=${VAULT_HOST}
+      - VAULT_PORT=8200
+      - VAULT_SCHEME=https
+      - VAULT_ROLE_ID=${PAYMENT_VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${PAYMENT_VAULT_SECRET_ID}
+      - VAULT_TRUSTSTORE_PASSWORD=${VAULT_TRUSTSTORE_PASSWORD}
+      - VAULT_SSL_TRUST_STORE_PASSWORD=${VAULT_TRUSTSTORE_PASSWORD}
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=karga-kafka:29092
     depends_on:
       - payment-db
       - karga-redis
       - karga-kafka
+    extra_hosts:
+      - "vault-server:host-gateway"
     networks:
       - karga-network
 
@@ -84,18 +106,26 @@ services:
     build:
       context: .
       dockerfile: trip-service/Dockerfile
-    #    ports:
-    #      - "8087:8087"
     secrets:
       - trip_db_password
       - redis_username
       - redis_password
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - VAULT_HOST=${VAULT_HOST}
+      - VAULT_PORT=8200
+      - VAULT_SCHEME=https
+      - VAULT_ROLE_ID=${TRIP_VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${TRIP_VAULT_SECRET_ID}
+      - VAULT_TRUSTSTORE_PASSWORD=${VAULT_TRUSTSTORE_PASSWORD}
+      - VAULT_SSL_TRUST_STORE_PASSWORD=${VAULT_TRUSTSTORE_PASSWORD}
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=karga-kafka:29092
     depends_on:
       - trip-db
       - karga-redis
       - karga-kafka
+    extra_hosts:
+      - "vault-server:host-gateway"
     networks:
       - karga-network
 
@@ -103,24 +133,30 @@ services:
     build:
       context: .
       dockerfile: user-service/Dockerfile
-    #    ports:
-    #      - "8088:8088"
     secrets:
       - user_db_password
       - redis_username
       - redis_password
-
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - VAULT_HOST=${VAULT_HOST}
+      - VAULT_PORT=8200
+      - VAULT_SCHEME=https
+      - VAULT_ROLE_ID=${USER_VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${USER_VAULT_SECRET_ID}
+      - VAULT_TRUSTSTORE_PASSWORD=${VAULT_TRUSTSTORE_PASSWORD}
+      - VAULT_SSL_TRUST_STORE_PASSWORD=${VAULT_TRUSTSTORE_PASSWORD}
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=karga-kafka:29092
     depends_on:
       - user-db
       - karga-redis
       - karga-kafka
+    extra_hosts:
+      - "vault-server:host-gateway"
     networks:
       - karga-network
 
   # ----- POSTGRES DB START -----
-
   auth-db:
     image: postgres:18-alpine
     container_name: auth-db-karga
@@ -129,7 +165,6 @@ services:
       - auth_db_password
     ports:
       - "5432:5432"
-
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/auth_db_password
       POSTGRES_USER: karga
@@ -147,7 +182,6 @@ services:
       - "5433:5432"
     secrets:
       - driver_db_password
-
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/driver_db_password
       POSTGRES_USER: karga
@@ -166,7 +200,6 @@ services:
     secrets:
       - payment_db_password
     command: [ "postgres", "-c", "wal_level=logical" ]
-
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/payment_db_password
       POSTGRES_USER: karga
@@ -202,7 +235,6 @@ services:
       - "5436:5432"
     secrets:
       - user_db_password
-
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/user_db_password
       POSTGRES_USER: karga
@@ -211,7 +243,6 @@ services:
       - user-postgres-data:/var/lib/postgresql
     networks:
       - karga-network
-
 
   # ----- REDIS START -----
   karga-redis:
@@ -242,33 +273,18 @@ services:
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-
-      # DEFINING LISTENERS
-      # 1. CONTROLLER: Internal metadata management (9093)
-      # 2. PLAINTEXT: Internal Docker network communication (29092)
-      # 3. EXTERNAL: Connection from your Host Machine/IDE (9092)
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9092
-
-      # ADVERTISING ADDRESSES
-      # Clients inside Docker see "karga-kafka:29092"
-      # Clients outside Docker see "localhost:9092"
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://karga-kafka:29092,EXTERNAL://localhost:9092
-
-      # MAPPING PROTOCOLS
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
-
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
-
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
-
     networks:
       - karga-network
     volumes:
@@ -278,6 +294,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
   # ----- DEBEZIUM START -----
   karga-connect:
     image: debezium/connect:3.0.0.Final
@@ -298,7 +315,6 @@ services:
       - payment-db
     networks:
       - karga-network
-
 
 secrets:
   auth_db_password:
@@ -331,5 +347,5 @@ volumes:
   trip-postgres-data:
   user-postgres-data:
   karga-kafka-data:
-
-
+  vault-data:
+    external: true
