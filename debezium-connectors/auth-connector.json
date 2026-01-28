@@ -1,0 +1,22 @@
+{
+  "name": "auth-outbox-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+    "database.hostname": "auth-db",
+    "database.port": "5432",
+    "database.user": "karga",
+    "database.password": "{{auth_db_pass}}",
+    "database.dbname": "auth_db",
+    "topic.prefix": "karga-auth",
+    "plugin.name": "pgoutput",
+    "slot.name": "debezium_auth_slot",
+    "table.include.list": "auth_outbox",
+    "transforms": "outbox",
+    "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",
+    "transforms.outbox.table.fields.additional.placement": "event_type:header:eventType,id:header:id",
+    "transforms.outbox.table.field.event.key": "aggregate_id",
+    "transforms.outbox.table.field.event.payload": "payload",
+    "transforms.outbox.route.topic.replacement": "auth_events"
+  }
+}

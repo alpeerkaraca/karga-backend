@@ -20,22 +20,21 @@ spec:
           imagePullPolicy: Never
 
           env:
+            - name: VAULT_HOST
+              value: "http://192.168.1.132"
+            - name: VAULT_ROLE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vault-approle-creds
+                  key: VAULT_ROLE_ID
+            - name: VAULT_SECRET_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vault-approle-creds
+                  key: VAULT_SECRET_ID
+
             - name: SPRING_PROFILES_ACTIVE
               value: "k8s"
-          volumeMounts:
-            - name: secret-volume
-              mountPath: "/etc/secrets"
-              readOnly: true
-            - name: certs-volume
-              mountPath: "/etc/certs"
-              readOnly: true
-      volumes:
-        - name: secret-volume
-          secret:
-            secretName: karga-secrets
-        - name: certs-volume
-          secret:
-            secretName: auth-jwt-keys
 ---
 apiVersion: v1
 kind: Service
