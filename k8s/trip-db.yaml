@@ -14,6 +14,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: trip-db
+  namespace: data-prod
 spec:
   serviceName: trip-db
   replicas: 1
@@ -40,10 +41,11 @@ spec:
               mountPath: /var/lib/postgresql
             - name: secret-volume
               mountPath: /etc/secrets
+              readOnly: true
       volumes:
         - name: secret-volume
           secret:
-            secretName: karga-secrets
+            secretName: trip-db-secret
   volumeClaimTemplates:
     - metadata:
         name: trip-db-data

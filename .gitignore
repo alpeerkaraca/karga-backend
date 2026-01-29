@@ -79,7 +79,7 @@ k8s/karga-secret.yaml
 
 # --- Secret Files ---
 secrets/
-**/secrets/**
+k8s/external-secrets/**
 .env.docker
 .env.local
 .env

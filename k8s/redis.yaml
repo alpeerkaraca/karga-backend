@@ -15,6 +15,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: karga-redis
+  namespace: data-prod
 spec:
   serviceName: karga-redis
   replicas: 1
@@ -33,7 +34,8 @@ spec:
           args:
             - |
               mkdir -p /usr/local/etc/redis &&
-              echo "user $(cat /etc/secrets/redis_username) on >$(cat /etc/secrets/redis_password) ~* +@all" > /usr/local/etc/redis/users.acl &&
+              echo "user default off" > /usr/local/etc/redis/users.acl &&
+              echo "user $(cat /etc/secrets/redis_username) on >$(cat /etc/secrets/redis_password) ~* +@all -@admin -@dangerous" >> /usr/local/etc/redis/users.acl &&
               redis-server --aclfile /usr/local/etc/redis/users.acl --appendonly yes
           ports:
             - containerPort: 6379
@@ -47,7 +49,7 @@ spec:
       volumes:
         - name: secret-volume
           secret:
-            secretName: karga-secrets
+            secretName: redis-db-secret
 
   volumeClaimTemplates:
     - metadata:

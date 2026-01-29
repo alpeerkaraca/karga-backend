@@ -52,7 +52,7 @@ Each microservice connects to Vault using the following configuration in `applic
 spring.cloud.vault.host=${VAULT_HOST:localhost}
 spring.cloud.vault.port=${VAULT_PORT:8200}
 spring.cloud.vault.scheme=${VAULT_SCHEME:https}
-spring.cloud.vault.ssl.trust-store=classpath:vault-truststore.jks
+spring.cloud.vault.ssl.trust-store=classpath:vault.jks
 spring.cloud.vault.ssl.trust-store-password=${VAULT_TRUSTSTORE_PASSWORD}
 spring.cloud.vault.authentication=APPROLE
 spring.cloud.vault.app-role.role-id=${VAULT_ROLE_ID}
@@ -74,14 +74,14 @@ Vault communication is secured via TLS. Each service requires a **truststore** c
 openssl req -x509 -newkey rsa:4096 -days 365 -nodes \
   -keyout vault/certs/vault.key \
   -out vault/certs/vault.crt \
-  -subj "//CN=vault-server" \
+  -subj "/CN=vault-server" \
   -addext "subjectAltName = DNS:localhost,DNS:vault-server,IP:127.0.0.1,IP:0.0.0.0"
 ```
 
 2. **Import certificate into Java Keystore:**
 
 ```bash
-keytool -import -alias vault -keystore vault-truststore.jks -file vault/certs/vault.crt
+keytool -import -alias vault -keystore vault.jks -file vault/certs/vault.crt
 ```
 
 3. **Copy the truststore** to each service's `src/main/resources/` directory.
@@ -226,9 +226,9 @@ cp secrets-example/* secrets/
 ### 3. Configure Debezium
 
 In order to communicate through Kafka you need to configure Debezium. All .json files are located
-at [/debezium](/debezium).
+at [/debezium-connectors](/debezium-connectors).
 
-To configure your connectors you can refer to [Debezium Configuration Guide](debezium/README.md).
+To configure your connectors you can refer to [Debezium Configuration Guide](debezium-connectors/README.md).
 
 ### 4. Build & Run
 
@@ -332,16 +332,58 @@ karga-microservices/
 ├── k8s/                       # Kubernetes deployment manifests
 │   ├── *-deployment.yaml     # Service deployments
 │   ├── *-db.yaml             # Database deployments
-│   └── vault-store.yaml      # External Secrets Operator config
+│   ├── vault-store.yaml      # External Secrets Operator config
+│   └── external-secrets/     # ExternalSecret resources for Vault
+│       └── data-prod/        # Database credentials from Vault
 ├── vault/                     # Vault server configuration
 │   ├── certs/                # SSL certificates & README
-│   └── config/               # Vault HCL configuration
+│   ├── config/               # Vault HCL configuration
+│   └── nginx.conf            # Nginx reverse proxy for Vault UI
+├── debezium-connectors/       # Debezium CDC connector configurations
 ├── secrets/                   # Docker secrets (gitignored)
 ├── secrets-example/           # Secret file templates
 ├── docker-compose.yml         # Docker Compose orchestration
+├── build-all.ps1             # PowerShell build & deploy script
+├── jenkinsfile               # Jenkins CI/CD pipeline
 ├── .env.example              # Environment variable template
 └── .tool-versions            # ASDF version manager config
 ```
+
+---
+
+## 🔄 CI/CD Pipeline
+
+The project includes a **Jenkins pipeline** (`jenkinsfile`) for automated builds and deployments.
+
+### Pipeline Features
+
+- **Selective Service Deployment:** Choose to build/deploy a single service or all services.
+- **Multiple Deployment Targets:** Deploy to Kubernetes (Minikube) or build locally with Podman.
+- **Parallel Builds:** Services are built in parallel for faster CI/CD.
+- **Health Checks:** Validates Podman and Minikube availability before builds.
+
+### Jenkins Pipeline Parameters
+
+| Parameter           | Options                                                        | Description                   |
+|---------------------|----------------------------------------------------------------|-------------------------------|
+| `SERVICE_TO_DEPLOY` | `all`, `auth-service`, `user-service`, `payment-service`, etc. | Which service to build/deploy |
+| `DEPLOY_TARGET`     | `kubernetes`, `podman_local`                                   | Target deployment environment |
+| `SKIP_TESTS`        | `true`, `false`                                                | Skip tests during Maven build |
+
+### Manual Build Script (PowerShell)
+
+For local development without Jenkins, use the `build-all.ps1` script:
+
+```powershell
+# Build all services and deploy to Minikube
+.\build-all.ps1
+```
+
+This script:
+
+1. Builds `karga-common` shared library
+2. Creates Podman images for each service
+3. Loads images into Minikube using TAR export
 
 ---
 
@@ -358,23 +400,72 @@ kubectl create namespace app-prod
 kubectl create namespace data-prod
 ```
 
-2. **Create Vault AppRole credentials secret:**
+2. **Create Vault CA certificate secret:**
 
 ```bash
-kubectl create secret generic vault-approle-creds \
-  --from-literal=VAULT_ROLE_ID=your_role_id \
-  --from-literal=VAULT_SECRET_ID=your_secret_id \
+kubectl create secret generic vault-ca \
+  --from-file=vault.crt=vault/certs/vault.crt \
+  -n data-prod
+```
+
+3. **Create Vault truststore secret (for services):**
+
+```bash
+kubectl create secret generic vault-truststore \
+  --from-file=vault.jks=path/to/vault.jks \
   -n app-prod
 ```
 
-3. **(Optional) External Secrets Operator:**
+4. **Create Vault AppRole credentials secret:**
 
-For Kubernetes environments, you can use the [External Secrets Operator](https://external-secrets.io/) with the provided
-`vault-store.yaml`:
+```bash
+kubectl create secret generic vault-approle-creds \
+  --from-literal=AUTH_VAULT_ROLE_ID=your_auth_role_id \
+  --from-literal=AUTH_VAULT_SECRET_ID=your_auth_secret_id \
+  --from-literal=DRIVER_VAULT_ROLE_ID=your_driver_role_id \
+  --from-literal=DRIVER_VAULT_SECRET_ID=your_driver_secret_id \
+  --from-literal=PAYMENT_VAULT_ROLE_ID=your_payment_role_id \
+  --from-literal=PAYMENT_VAULT_SECRET_ID=your_payment_secret_id \
+  --from-literal=TRIP_VAULT_ROLE_ID=your_trip_role_id \
+  --from-literal=TRIP_VAULT_SECRET_ID=your_trip_secret_id \
+  --from-literal=USER_VAULT_ROLE_ID=your_user_role_id \
+  --from-literal=USER_VAULT_SECRET_ID=your_user_secret_id \
+  --from-literal=VAULT_TRUSTSTORE_PASSWORD=your_truststore_password \
+  -n app-prod
+```
+
+5. **Create Vault token secret (for External Secrets Operator):**
+
+```bash
+kubectl create secret generic vault-token \
+  --from-literal=token=your_vault_token \
+  -n data-prod
+```
+
+### External Secrets Operator Integration
+
+The project uses [External Secrets Operator](https://external-secrets.io/) to sync secrets from Vault to Kubernetes.
+
+1. **Install External Secrets Operator:**
+
+```bash
+helm repo add external-secrets https://charts.external-secrets.io
+helm install external-secrets external-secrets/external-secrets -n external-secrets --create-namespace
+```
+
+2. **Deploy SecretStore (connects to Vault):**
 
 ```bash
 kubectl apply -f k8s/vault-store.yaml
 ```
+
+3. **Deploy ExternalSecrets (syncs database credentials):**
+
+```bash
+kubectl apply -f k8s/external-secrets/data-prod/
+```
+
+This creates Kubernetes secrets automatically from Vault paths like `secret/auth-service/k8s`.
 
 ### Deploy Services
 
@@ -404,5 +495,38 @@ kubectl apply -f k8s/user-deployment.yaml
 
 - [Vault Certificate Setup Guide](vault/certs/README.md) - How to create and configure SSL certificates for Vault
 - [Vault Server Configuration](vault/config/config.hcl) - HCL configuration for Vault server
+- [Debezium Configuration Guide](debezium-connectors/README.md) - How to configure Debezium CDC connectors
+- [External Secrets Examples](k8s/external-secrets/) - ExternalSecret resources for Vault integration
 
+---
+
+## 🛠 Troubleshooting
+
+### Vault Connection Issues
+
+If services fail to connect to Vault:
+
+1. **Verify Vault is accessible:**
+   ```bash
+   curl -k https://<VAULT_HOST>:8200/v1/sys/health
+   ```
+
+2. **Check truststore configuration:**
+   - Ensure `vault.jks` contains the Vault server certificate
+   - Verify `VAULT_TRUSTSTORE_PASSWORD` is correct
+
+3. **For Kubernetes deployments:**
+   - Ensure `vault-truststore` secret exists in `app-prod` namespace
+   - Verify the service can reach Vault from within the cluster
+
+### Nginx Reverse Proxy for Vault UI
+
+For development, you can use the Nginx configuration in `vault/nginx.conf` to proxy HTTP requests to Vault's HTTPS
+endpoint:
+
+```bash
+docker run -d -p 9000:80 -v $(pwd)/vault/nginx.conf:/etc/nginx/nginx.conf:ro nginx:alpine
+```
+
+Access Vault UI at `http://localhost:9000` (proxied to HTTPS Vault server).
 

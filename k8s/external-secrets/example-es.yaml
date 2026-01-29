@@ -1,0 +1,18 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: example-es
+  namespace: data-prod
+spec:
+  refreshInterval: "1m"
+  secretStoreRef:
+    name: vault-store
+    kind: SecretStore
+  target:
+    name: example-secret
+    creationPolicy: Owner
+  data:
+    - secretKey: example_key # Name of the key in the Kubernetes Secret to create
+      remoteRef:
+        key: your-path-on-vault
+        property: key name of the secret
