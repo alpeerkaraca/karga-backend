@@ -1,0 +1,22 @@
+{
+  "name": "trip-outbox-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+    "database.hostname": "trip-db",
+    "database.port": "5432",
+    "database.user": "karga",
+    "database.password": "{{trip_db_pass}}",
+    "database.dbname": "trip_db",
+    "topic.prefix": "karga-trip",
+    "plugin.name": "pgoutput",
+    "slot.name": "debezium_trip_slot",
+    "table.include.list": "trip_outbox",
+    "transforms": "outbox",
+    "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",
+    "transforms.outbox.table.fields.additional.placement": "event_type:header:eventType,id:header:id, aggregate_id:header:aggregateId",
+    "transforms.outbox.table.field.event.key": "aggregate_id",
+    "transforms.outbox.table.field.event.payload": "payload",
+    "transforms.outbox.route.topic.replacement": "trip_events"
+  }
+}

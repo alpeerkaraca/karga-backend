@@ -1,0 +1,18 @@
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: vault-store
+  namespace: data-prod
+spec:
+  provider:
+    vault:
+      server: "uri of vault-server"
+      path: "secret"
+      version: "v2"
+      auth:
+        appRole:
+          path: "approle"
+          roleId: "role-id"
+          secretRef:
+            name: vault-secret-id
+            key: secret-id
