@@ -7,3 +7,7 @@ mvnw
 *.cmd
 *.log
 application.log
+*.tar
+Dockerfile
+Jenkinsfile
+build-all.ps1

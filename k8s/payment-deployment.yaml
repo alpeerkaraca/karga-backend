@@ -1,3 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+  namespace: app-prod
+spec:
+  selector:
+    app: payment-service
+  ports:
+    - port: 80
+      targetPort: 8080
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,49 +28,43 @@ spec:
     spec:
       containers:
         - name: payment-service
-          image: localhost/karga/payment-service:v1
+          image: localhost/karga/payment-service:latest
           imagePullPolicy: Never
-
           env:
             - name: VAULT_HOST
-              value: "http://192.168.1.132"
+              value: "192.168.49.1"
+            - name: VAULT_PORT
+              value: "8200"
+            - name: VAULT_SCHEME
+              value: "https"
+
+            - name: SPRING_CLOUD_VAULT_SSL_TRUST_STORE
+              value: file:///etc/certs/vault.jks
+            - name: VAULT_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vault-approle-creds
+                  key: VAULT_TRUSTSTORE_PASSWORD
+
             - name: VAULT_ROLE_ID
               valueFrom:
                 secretKeyRef:
                   name: vault-approle-creds
-                  key: VAULT_ROLE_ID
+                  key: PAYMENT_VAULT_ROLE_ID
             - name: VAULT_SECRET_ID
               valueFrom:
                 secretKeyRef:
                   name: vault-approle-creds
-                  key: VAULT_SECRET_ID
-
+                  key: PAYMENT_VAULT_SECRET_ID
             - name: SPRING_PROFILES_ACTIVE
               value: "k8s"
-
+            - name: SERVER_PORT
+              value: "8080"
           volumeMounts:
-            - name: secret-volume
-              mountPath: "/etc/secrets"
-              readOnly: true
-            - name: certs-volume
-              mountPath: "/etc/certs"
+            - name: truststore-volume
+              mountPath: /etc/certs
               readOnly: true
       volumes:
-        - name: secret-volume
+        - name: truststore-volume
           secret:
-            secretName: karga-secrets
-        - name: certs-volume
-          secret:
-            secretName: auth-jwt-keys
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: payment-service
-  namespace: app-prod
-spec:
-  selector:
-    app: payment-service
-  ports:
-    - port: 8086
-      targetPort: 8086
+            secretName: vault-truststore
