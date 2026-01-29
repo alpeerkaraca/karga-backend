@@ -1,0 +1,109 @@
+pipeline {
+    agent any
+
+    parameters {
+        choice(name: 'SERVICE_TO_DEPLOY', 
+               choices: ['all', 'auth-service', 'user-service', 'payment-service', 'driver-service', 'trip-service'], 
+               description: 'Which service do you want to build/deploy?')
+
+        choice(name: 'DEPLOY_TARGET', 
+               choices: ['kubernetes', 'podman_local'], 
+               description: 'What is the target environment?')
+               
+        booleanParam(name: 'SKIP_TESTS', defaultValue: true, description: 'Should tests be skipped?')
+    }
+
+    environment {
+        REGISTRY_URL = "localhost/karga"
+    }
+
+    stages {
+        stage('System Health Check') {
+            steps {
+                script {
+                    echo "--- System Health Checks ---"
+                    try {
+                        powershell 'podman info'
+                        echo "✅ Podman: ACTIVE"
+                    } catch (Exception e) {
+                        error "❌ ERROR: Podman is not running!"
+                    }
+
+                    if (params.DEPLOY_TARGET == 'kubernetes') {
+                        try {
+                            powershell 'minikube status'
+                            echo "✅ Kubernetes: ACTIVE"
+                        } catch (Exception e) {
+                            error "❌ ERROR: Minikube is not running!"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                git branch: 'master', url: 'https://github.com/alpeerkaraca/karga-backend.git'
+            }
+        }
+
+        stage('Pre-Build Check') {
+            steps {
+                dir('karga-common') {
+                    echo "🔍 Checking code integrity (Common Lib)..."
+                    bat "mvn clean install -DskipTests=${params.SKIP_TESTS}"
+                }
+            }
+        }
+
+        stage('Process Services') {
+            parallel {
+                stage('Auth Service') {
+                    when { expression { params.SERVICE_TO_DEPLOY == 'all' || params.SERVICE_TO_DEPLOY == 'auth-service' } }
+                    steps { processService('auth-service') }
+                }
+                stage('User Service') {
+                    when { expression { params.SERVICE_TO_DEPLOY == 'all' || params.SERVICE_TO_DEPLOY == 'user-service' } }
+                    steps { processService('user-service') }
+                }
+                stage('Payment Service') {
+                    when { expression { params.SERVICE_TO_DEPLOY == 'all' || params.SERVICE_TO_DEPLOY == 'payment-service' } }
+                    steps { processService('payment-service') }
+                }
+                stage('Driver Service') {
+                    when { expression { params.SERVICE_TO_DEPLOY == 'all' || params.SERVICE_TO_DEPLOY == 'driver-service' } }
+                    steps { processService('driver-service') }
+                }
+                stage('Trip Service') {
+                    when { expression { params.SERVICE_TO_DEPLOY == 'all' || params.SERVICE_TO_DEPLOY == 'trip-service' } }
+                    steps { processService('trip-service') }
+                }
+            }
+        }
+    }
+}
+
+def processService(serviceName) {
+
+    echo "🔨 Building image for ${serviceName}..."
+
+    bat "podman build -t localhost/karga/${serviceName}:latest -f .\\${serviceName}\\Dockerfile ."
+
+    if (params.DEPLOY_TARGET == 'kubernetes') {
+        echo "🚀 Deploying to Kubernetes: ${serviceName}"
+        
+        bat "podman save -o ${serviceName}.tar localhost/karga/${serviceName}:latest"
+        bat "minikube image load ${serviceName}.tar"
+        bat "del ${serviceName}.tar"
+        
+        try {
+            bat "kubectl rollout restart deployment ${serviceName} -n app-prod"
+            echo "✅ ${serviceName} updated successfully."
+        } catch (Exception e) {
+            echo "⚠️ Deployment not found for ${serviceName}, this might be the initial setup."
+        }
+        
+    } else {
+        echo "🏁 Local Build Complete: ${serviceName}"
+    }
+}
