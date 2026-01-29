@@ -123,7 +123,7 @@ public class JWTService {
             Map<String, Object> refreshClaims = new HashMap<>();
             refreshClaims.put(CLAIM_USER_ID, userId.toString());
             refreshClaims.put(CLAIM_ROLES, roles);
-            refreshClaims.put(CLAIM_TOKEN_TYPE, TOKEN_TYPE_ACCESS);
+            refreshClaims.put(CLAIM_TOKEN_TYPE, TOKEN_TYPE_REFRESH);
 
             String refreshToken = generateToken(refreshClaims, username, refreshTokenExpirationMs);
 
