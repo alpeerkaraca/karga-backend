@@ -35,8 +35,8 @@ public class WebConfig {
                         .requestMatchers(
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
-                                "/swagger-ui.html"
-                        ).permitAll()
+                                "/swagger-ui.html",
+                                "/actuator/**").permitAll()
                         .anyRequest().authenticated())
 
                 .sessionManagement(session ->
