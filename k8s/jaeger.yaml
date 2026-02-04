@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: mon-prod
+spec:
+  ports:
+    - name: query
+      port: 16686
+    - name: otlp-grpc
+      port: 4317
+  selector:
+    app: jaeger
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: mon-prod
+  labels:
+    app: jaeger
+spec:
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      containers:
+        - name: jaeger
+          image: docker.io/jaegertracing/all-in-one:1.76.0
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"

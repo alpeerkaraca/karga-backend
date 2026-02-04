@@ -35,11 +35,34 @@ spec:
             - |
               mkdir -p /usr/local/etc/redis &&
               echo "user default off" > /usr/local/etc/redis/users.acl &&
-              echo "user $(cat /etc/secrets/redis_username) on >$(cat /etc/secrets/redis_password) ~* +@all -@admin -@dangerous" >> /usr/local/etc/redis/users.acl &&
+              echo "user $(cat /etc/secrets/redis_username) on >$(cat /etc/secrets/redis_password) ~* +@all -@admin -@dangerous +info" >> /usr/local/etc/redis/users.acl &&
               redis-server --aclfile /usr/local/etc/redis/users.acl --appendonly yes
           ports:
             - containerPort: 6379
               name: client
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - "redis-cli -u redis://$(cat /etc/secrets/redis_username):$(cat /etc/secrets/redis_password)@localhost:6379 ping | grep PONG"
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - "redis-cli -u redis://$(cat /etc/secrets/redis_username):$(cat /etc/secrets/redis_password)@localhost:6379 ping | grep PONG"
+            initialDelaySeconds: 5
+            periodSeconds: 10
           volumeMounts:
             - name: redis-data
               mountPath: /data
