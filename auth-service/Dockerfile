@@ -15,7 +15,9 @@ COPY auth-service/src auth-service/src
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -f auth-service/pom.xml package -DskipTests
 
-ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar /opentelemetry-javaagent.jar
+ADD --checksum=sha256:5c48cd48f9907f824214e22f14a28375c92613a94b0cf98381997e0a678220ce \
+https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.24.0/opentelemetry-javaagent.jar \
+/opentelemetry-javaagent.jar
 
 # (LAYERING)
 WORKDIR /app/auth-service/target
