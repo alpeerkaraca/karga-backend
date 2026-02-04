@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: debezium
+  namespace: data-prod
+  labels:
+    app: debezium
+spec:
+  ports:
+    - port: 8083
+      name: http-api
+      targetPort: 8083
+  selector:
+    app: debezium
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: debezium
+  namespace: data-prod
+  labels:
+    app: debezium
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: debezium
+  template:
+    metadata:
+      labels:
+        app: debezium
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8083"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: connect
+          image: docker.io/debezium/connect:3.0.0.Final
+          ports:
+            - containerPort: 8083
+          env:
+            - name: BOOTSTRAP_SERVERS
+              value: "karga-kafka-kafka-bootstrap.data-prod.svc.cluster.local:9092"
+
+            - name: GROUP_ID
+              value: "1"
+            - name: CONFIG_STORAGE_TOPIC
+              value: "my_connect_configs"
+            - name: CONFIG_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: OFFSET_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: STATUS_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: OFFSET_STORAGE_TOPIC
+              value: "my_connect_offsets"
+            - name: STATUS_STORAGE_TOPIC
+              value: "my_connect_statuses"
+
+            - name: KEY_CONVERTER_SCHEMAS_ENABLE
+              value: "false"
+            - name: VALUE_CONVERTER_SCHEMAS_ENABLE
+              value: "false"
+
+            - name: CONNECT_REST_ADVERTISED_HOST_NAME
+              value: "debezium"

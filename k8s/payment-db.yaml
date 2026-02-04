@@ -26,9 +26,22 @@ spec:
       labels:
         app: payment-db
     spec:
+      securityContext:
+        fsGroup: 70
       containers:
         - name: payment-db-postgres
+          securityContext:
+            runAsUser: 70
+            runAsGroup: 70
+            runAsNonRoot: true
           image: docker.io/postgres:18-alpine
+          args:
+            - "-c"
+            - "wal_level=logical"
+            - "-c"
+            - "max_replication_slots=4"
+            - "-c"
+            - "max_wal_senders=4"
           env:
             - name: POSTGRES_DB
               value: payment_db
@@ -36,9 +49,27 @@ spec:
               value: karga
             - name: POSTGRES_PASSWORD_FILE
               value: "/etc/secrets/payment_db_password"
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          readinessProbe:
+            exec:
+              command: [ "pg_isready", "-U", "karga", "-d", "payment_db" ]
+            initialDelaySeconds: 30
+          livenessProbe:
+            exec:
+              command: [ "pg_isready", "-U", "karga", "-d", "payment_db" ]
+            initialDelaySeconds: 30
+            periodSeconds: 10
           volumeMounts:
             - name: payment-db-data
-              mountPath: /var/lib/postgresql
+              mountPath: /var/lib/postgresql/data
             - name: secret-volume
               mountPath: /etc/secrets
               readOnly: true
@@ -54,4 +85,3 @@ spec:
         resources:
           requests:
             storage: 2Gi
-

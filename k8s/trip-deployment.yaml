@@ -7,8 +7,12 @@ spec:
   selector:
     app: trip-service
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 8080
+    - name: management
+      port: 9090
+      targetPort: 9090
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -21,17 +25,22 @@ spec:
       app: trip-service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/actuator/prometheus"
       labels:
         app: trip-service
     spec:
       containers:
         - name: trip-service
-          image: localhost/karga/trip-service:latest
-          imagePullPolicy: Never
+          image: quay.io/alpeerkaraca/karga-trip-service:latest
+          imagePullPolicy: Always
+          command: [ "java", "-javaagent:/app/agent.jar", "org.springframework.boot.loader.launch.JarLauncher" ]
 
           env:
             - name: VAULT_HOST
-              value: "192.168.49.1"
+              value: "vault-server"
             - name: VAULT_PORT
               value: "8200"
             - name: VAULT_SCHEME
@@ -44,6 +53,8 @@ spec:
                 secretKeyRef:
                   name: vault-approle-creds
                   key: VAULT_TRUSTSTORE_PASSWORD
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: "none"
 
             - name: VAULT_ROLE_ID
               valueFrom:
@@ -56,11 +67,51 @@ spec:
                   name: vault-approle-creds
                   key: TRIP_VAULT_SECRET_ID
 
+            - name: OTEL_SERVICE_NAME
+              value: "trip-service"
+            - name: OTEL_LOGS_EXPORTER
+              value: "none"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://jaeger.mon-prod.svc.cluster.local:4317"
+            - name: OTEL_METRICS_EXPORTER
+              value: "none"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "grpc"
             - name: SPRING_PROFILES_ACTIVE
               value: "k8s"
 
             - name: SERVER_PORT
-              value: "80"
+              value: "8080"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1000Mi"
+
+          startupProbe:
+            httpGet:
+              port: 9090
+              path: /actuator/health/liveness
+            periodSeconds: 5
+            failureThreshold: 60
+            initialDelaySeconds: 20
+
+          livenessProbe:
+            httpGet:
+              port: 9090
+              path: /actuator/health/liveness
+            initialDelaySeconds: 20
+
+          readinessProbe:
+            httpGet:
+              port: 9090
+              path: /actuator/health/readiness
+            initialDelaySeconds: 30
+
           volumeMounts:
             - name: truststore-volume
               mountPath: /etc/certs

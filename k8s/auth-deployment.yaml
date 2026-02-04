@@ -7,8 +7,13 @@ spec:
   selector:
     app: auth-service
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 8080
+    - name: management
+      port: 9090
+      targetPort: 9090
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -18,21 +23,33 @@ metadata:
   labels:
     app: auth-service
 spec:
+  replicas: 3
   selector:
     matchLabels:
       app: auth-service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/actuator/prometheus"
       labels:
         app: auth-service
     spec:
       containers:
         - name: auth-service
-          image: localhost/karga/auth-service:latest
-          imagePullPolicy: Never
+          image: quay.io/alpeerkaraca/karga-auth-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 9090
+              name: management
+
+          command: [ "java", "-javaagent:/app/agent.jar", "org.springframework.boot.loader.launch.JarLauncher" ]
           env:
             - name: VAULT_HOST
-              value: "192.168.49.1"
+              value: "vault-server"
             - name: VAULT_PORT
               value: "8200"
             - name: VAULT_SCHEME
@@ -61,10 +78,61 @@ spec:
               value: "k8s"
             - name: SERVER_PORT
               value: "8080"
+            - name: MANAGEMENT_SERVER_PORT
+              value: "9090"
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: "none"
+            - name: SPRING_JPA_PROPERTIES_HIBERNATE_BOOT_ALLOW_JDBC_METADATA_ACCESS
+              value: "true"
+            - name: SPRING_JPA_PROPERTIES_HIBERNATE_TEMP_USE_JDBC_METADATA_DEFAULTS
+              value: "true"
+
+            - name: OTEL_SERVICE_NAME
+              value: "auth-service"
+            - name: OTEL_LOGS_EXPORTER
+              value: "none"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://jaeger.mon-prod.svc.cluster.local:4317"
+            - name: OTEL_METRICS_EXPORTER
+              value: "none"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "grpc"
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1000Mi"
+
+          startupProbe:
+            httpGet:
+              port: 9090
+              path: /actuator/health/liveness
+            periodSeconds: 5
+            failureThreshold: 60
+            initialDelaySeconds: 20
+
+          livenessProbe:
+            httpGet:
+              port: 9090
+              path: /actuator/health/liveness
+            initialDelaySeconds: 20
+
+          readinessProbe:
+            httpGet:
+              port: 9090
+              path: /actuator/health/readiness
+            initialDelaySeconds: 30
+
           volumeMounts:
             - name: truststore-volume
               mountPath: /etc/certs
               readOnly: true
+
       volumes:
         - name: truststore-volume
           secret:
